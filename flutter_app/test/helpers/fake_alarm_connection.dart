@@ -7,13 +7,17 @@ import 'package:smartalarm/services/alarm_connection.dart';
 /// Faux broker : les tests « publient » comme le ferait l'ESP32.
 class FakeAlarmConnection implements AlarmConnection {
   @override
-  final ValueNotifier<BrokerStatus> status = ValueNotifier(BrokerStatus.disconnected);
+  final ValueNotifier<BrokerStatus> status = ValueNotifier(
+    BrokerStatus.disconnected,
+  );
   @override
   final ValueNotifier<String?> lastError = ValueNotifier(null);
 
   final _states = StreamController<AlarmState>.broadcast(sync: true);
   final _motions = StreamController<MotionEvent>.broadcast(sync: true);
-  final _availability = StreamController<DeviceAvailability>.broadcast(sync: true);
+  final _availability = StreamController<DeviceAvailability>.broadcast(
+    sync: true,
+  );
 
   final List<AlarmCommand> sentCommands = [];
   bool acceptCommands = true;
@@ -47,9 +51,14 @@ class FakeAlarmConnection implements AlarmConnection {
 
   void brokerConnected() => status.value = BrokerStatus.connected;
   void publishState(AlarmState state) => _states.add(state);
-  void publishAvailability(DeviceAvailability value) => _availability.add(value);
-  void publishMotion(int uptimeMs, {DateTime? at}) =>
-      _motions.add(MotionEvent(uptimeMs: uptimeMs, receivedAt: at ?? DateTime(2026, 10, 19, 10)));
+  void publishAvailability(DeviceAvailability value) =>
+      _availability.add(value);
+  void publishMotion(int uptimeMs, {DateTime? at}) => _motions.add(
+    MotionEvent(
+      uptimeMs: uptimeMs,
+      receivedAt: at ?? DateTime(2026, 10, 19, 10),
+    ),
+  );
 
   /// Broker connecté + ESP32 en ligne dans l'état donné (messages retained).
   void goLive(AlarmState state) {

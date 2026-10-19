@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../config/app_theme.dart';
 import '../controllers/alarm_controller.dart';
-import '../models/alarm_models.dart';
 import 'formatters.dart';
 import 'pulse.dart';
 
@@ -64,16 +63,16 @@ class InfoCard extends StatelessWidget {
 
 /// Statut du capteur PIR, déduit de l'état publié par l'ESP32.
 class PirStatusCard extends StatelessWidget {
-  const PirStatusCard({super.key, required this.status, required this.lastMotion});
+  const PirStatusCard({super.key, required this.status, required this.lastMotionAt});
 
   final PirStatus status;
-  final MotionEvent? lastMotion;
+  final DateTime? lastMotionAt;
 
   @override
   Widget build(BuildContext context) {
-    final detail = lastMotion == null
+    final detail = lastMotionAt == null
         ? 'Aucune détection reçue'
-        : 'Dernière détection à ${formatTime(lastMotion!.receivedAt)}';
+        : 'Dernière détection : ${formatShortDateTime(lastMotionAt!)}';
     return switch (status) {
       PirStatus.inactive => InfoCard(
           icon: Icons.sensors_off_rounded,

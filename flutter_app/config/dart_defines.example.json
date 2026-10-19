@@ -1,0 +1,8 @@
+{
+  "MQTT_HOST": "<votre-cluster>.hivemq.cloud",
+  "MQTT_WS_PORT": "8884",
+  "MQTT_WS_PATH": "/mqtt",
+  "MQTT_USERNAME": "<utilisateur-flutter>",
+  "MQTT_PASSWORD": "<mot-de-passe-flutter>",
+  "MQTT_TOPIC_BASE": "smartalarm/demo01"
+}

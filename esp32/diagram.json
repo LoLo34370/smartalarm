@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "author": "SmartAlarm",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-esp32-devkit-v1", "id": "esp", "top": 0, "left": 0, "attrs": {} },
+    {
+      "type": "wokwi-buzzer",
+      "id": "bz1",
+      "top": -104,
+      "left": -62,
+      "attrs": { "volume": "0.3" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_green",
+      "top": -72,
+      "left": -120,
+      "attrs": { "color": "green", "label": "ARMED" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_green",
+      "top": 4.95,
+      "left": -124.4,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-led",
+      "id": "led_red",
+      "top": -72,
+      "left": -190,
+      "attrs": { "color": "red", "label": "ALERT" }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r_red",
+      "top": 4.95,
+      "left": -194.4,
+      "rotate": 90,
+      "attrs": { "value": "220" }
+    },
+    {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir",
+      "top": -112,
+      "left": -290.92,
+      "attrs": {}
+    }
+  ],
+  "connections": [
+    [ "esp:TX0", "$serialMonitor:RX", "", [] ],
+    [ "esp:RX0", "$serialMonitor:TX", "", [] ],
+
+    [ "esp:D25", "bz1:2", "orange", [ "h-30" ] ],
+    [ "esp:D26", "r_green:2", "green", [ "h-100" ] ],
+    [ "r_green:1", "led_green:A", "green", [] ],
+    [ "esp:D27", "r_red:2", "red", [ "h-170" ] ],
+    [ "r_red:1", "led_red:A", "red", [] ],
+    [ "esp:D13", "pir:OUT", "blue", [ "h-250" ] ],
+
+    [ "bz1:1", "esp:GND.2", "black", [ "v235", "h40" ] ],
+    [ "led_green:C", "esp:GND.2", "black", [ "v245", "h110" ] ],
+    [ "led_red:C", "esp:GND.2", "black", [ "v245", "h180" ] ],
+    [ "pir:GND", "esp:GND.2", "black", [ "v235", "h240.36" ] ],
+
+    [ "pir:VCC", "esp:3V3", "red", [ "v250", "h375", "v-71.5" ] ]
+  ],
+  "dependencies": {}
+}

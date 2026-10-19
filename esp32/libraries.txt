@@ -1,0 +1,4 @@
+# Bibliothèques Arduino installées automatiquement par Wokwi.
+# WiFi et WiFiClientSecure font partie du cœur ESP32 : rien à déclarer.
+# PubSubClient (client MQTT) sera utilisé à partir de l'étape 4.
+PubSubClient

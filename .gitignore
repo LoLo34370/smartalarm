@@ -1,0 +1,42 @@
+# ─── Secrets (ne JAMAIS commiter) ─────────────────────────────
+esp32/config.h
+flutter_app/config/*.json
+!flutter_app/config/*.example.json
+*.env
+.env*
+
+# ─── macOS / éditeurs ─────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.swp
+
+# ─── Wokwi / Arduino / PlatformIO (builds locaux éventuels) ───
+esp32/build/
+esp32/.pio/
+*.elf
+*.bin
+
+# ─── Flutter / Dart ───────────────────────────────────────────
+flutter_app/.dart_tool/
+flutter_app/.flutter-plugins
+flutter_app/.flutter-plugins-dependencies
+flutter_app/.packages
+flutter_app/build/
+flutter_app/coverage/
+flutter_app/.metadata.bak
+
+# Android
+flutter_app/android/.gradle/
+flutter_app/android/local.properties
+flutter_app/android/key.properties
+flutter_app/android/**/*.jks
+flutter_app/android/**/*.keystore
+flutter_app/android/app/debug/
+flutter_app/android/app/release/
+
+# iOS / macOS (si activés plus tard)
+flutter_app/ios/Pods/
+flutter_app/ios/Flutter/Generated.xcconfig
+flutter_app/ios/Flutter/flutter_export_environment.sh

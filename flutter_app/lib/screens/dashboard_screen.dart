@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_theme.dart';
 import '../controllers/alarm_controller.dart';
 import '../models/alarm_models.dart';
+import '../models/sensor.dart';
 import '../services/alarm_connection.dart';
 import '../widgets/alarm_control_button.dart';
 import '../widgets/alarm_status_card.dart';
@@ -117,6 +118,8 @@ class DashboardScreen extends StatelessWidget {
         enabled: controller.canSendCommand,
         disabledReason: _disabledReason(),
         onPressed: controller.toggleAlarm,
+        onArmNight: controller.armNight,
+        armWarning: _armWarning(),
         isAuthenticating: controller.isAuthenticating,
         requireAuthToDisarm: controller.requireAuthToDisarm,
       );
@@ -127,29 +130,33 @@ class DashboardScreen extends StatelessWidget {
     return null;
   }
 
-  Widget _deviceCards() {
-    final cards = [
-      PirStatusCard(
-        status: controller.pirStatus,
-        lastMotionAt: controller.lastMotion?.at,
-      ),
-      SirenStatusCard(active: controller.isSirenActive),
-    ];
-    return LayoutBuilder(
-      builder: (context, constraints) => constraints.maxWidth < 380
-          ? Column(children: [cards[0], const SizedBox(height: 16), cards[1]])
-          : IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 16),
-                  Expanded(child: cards[1]),
-                ],
-              ),
-            ),
-    );
+  /// Un contact déjà ouvert à l'armement ne déclenchera l'alarme qu'à sa
+  /// prochaine ouverture : on prévient avant d'armer.
+  String? _armWarning() {
+    final open = controller.openContacts;
+    if (open.isEmpty) return null;
+    final names = open.map((s) => s.label.toLowerCase()).join(' et ');
+    return '${names[0].toUpperCase()}${names.substring(1)} '
+        '${open.length > 1 ? 'ouvertes : pensez à les fermer' : 'ouverte : pensez à la fermer'} '
+        'avant d\'activer.';
   }
+
+  Widget _deviceCards() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SensorsCard(entries: [
+            for (final sensor in Sensor.values)
+              (
+                sensor: sensor,
+                status: controller.sensorStatus(sensor),
+                isActive: controller.isSensorActive(sensor),
+                lastDetectionAt: controller.lastDetection(sensor)?.at,
+              ),
+          ]),
+          const SizedBox(height: 16),
+          SirenStatusCard(active: controller.isTriggered),
+        ],
+      );
 
   Widget _history(BuildContext context) => ActivityJournalCard(
         events: controller.journal,
@@ -168,7 +175,12 @@ class _Banners extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final banners = <Widget>[
-      if (controller.isTriggered) const IntrusionBanner(),
+      if (controller.isTriggered)
+        switch (controller.intrusionSensor) {
+          final sensor? => IntrusionBanner(
+              cause: '${sensor.isContact ? 'Ouverture' : 'Mouvement'} : ${sensor.label}.'),
+          null => const IntrusionBanner(),
+        },
       if (controller.connectionError case final error?)
         NoticeBanner(icon: Icons.cloud_off_rounded, message: error)
       else if (controller.brokerStatus == BrokerStatus.reconnecting)

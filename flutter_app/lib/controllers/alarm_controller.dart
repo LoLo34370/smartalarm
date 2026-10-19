@@ -4,12 +4,25 @@ import 'package:flutter/foundation.dart';
 
 import '../models/alarm_event.dart';
 import '../models/alarm_models.dart';
+import '../models/sensor.dart';
 import '../services/alarm_connection.dart';
 import '../services/device_authenticator.dart';
 import '../services/journal_store.dart';
 
-/// Ce que le capteur PIR signifie pour l'utilisateur, déduit de l'état publié.
-enum PirStatus { inactive, monitoring, motionDetected }
+/// Ce qu'un capteur signifie pour l'utilisateur, déduit de l'état publié.
+enum SensorStatus {
+  /// Alarme désactivée : le capteur ne déclenche rien.
+  inactive,
+
+  /// Mode nuit : capteur intérieur volontairement ignoré.
+  ignoredAtNight,
+
+  /// Le capteur déclenche l'alarme.
+  monitoring,
+
+  /// Le capteur est à l'origine de l'intrusion en cours.
+  intrusion,
+}
 
 /// État de l'écran, construit UNIQUEMENT à partir des messages MQTT.
 ///
@@ -58,6 +71,8 @@ class AlarmController extends ChangeNotifier {
 
   AlarmState? _alarmState;
   DeviceAvailability _availability = DeviceAvailability.unknown;
+  final Map<Sensor, bool> _sensorStates = {};
+  Sensor? _intrusionSensor;
   AlarmCommand? _pendingCommand;
   String? _commandWarning;
 
@@ -79,9 +94,31 @@ class AlarmController extends ChangeNotifier {
   /// Journal d'activité, l'entrée la plus récente en premier.
   List<AlarmEvent> get journal => List.unmodifiable(_journal);
 
-  /// Dernière détection de mouvement connue.
-  AlarmEvent? get lastMotion =>
-      _journal.where((e) => e.kind == AlarmEventKind.motion).firstOrNull;
+  /// Dernière détection connue de ce capteur.
+  AlarmEvent? lastDetection(Sensor sensor) => _journal
+      .where((e) => e.kind == AlarmEventKind.detection && e.sensor == sensor)
+      .firstOrNull;
+
+  /// Capteur actif (mouvement, ouverture), `null` tant que l'ESP32 ne l'a pas publié.
+  bool? isSensorActive(Sensor sensor) => _sensorStates[sensor];
+
+  /// Portes et fenêtres ouvertes : elles ne déclencheront l'alarme qu'à
+  /// leur prochaine ouverture si on arme maintenant.
+  List<Sensor> get openContacts =>
+      [for (final s in Sensor.values) if (s.isContact && _sensorStates[s] == true) s];
+
+  /// Capteur à l'origine de l'intrusion en cours, s'il est connu.
+  Sensor? get intrusionSensor => isTriggered ? _intrusionSensor : null;
+
+  SensorStatus sensorStatus(Sensor sensor) {
+    if (isTriggered) {
+      return sensor == _intrusionSensor ? SensorStatus.intrusion : SensorStatus.monitoring;
+    }
+    if (sensor.isMonitoredIn(_alarmState)) return SensorStatus.monitoring;
+    return _alarmState == AlarmState.armedNight
+        ? SensorStatus.ignoredAtNight
+        : SensorStatus.inactive;
+  }
 
   /// Une confirmation Face ID / Touch ID / code est demandée avant DISARM.
   bool get requireAuthToDisarm => _requireAuthToDisarm && _authenticator != null;
@@ -101,21 +138,16 @@ class AlarmController extends ChangeNotifier {
   bool get isLive => isBrokerConnected && isDeviceOnline;
 
   bool get isTriggered => _alarmState == AlarmState.triggered;
-  bool get isSirenActive => isTriggered;
 
-  /// Désarmé (ou inconnu) → proposer ARM ; armé ou déclenché → proposer DISARM.
+  /// Désarmé (ou inconnu) → proposer ARM (ou ARM_NIGHT) ;
+  /// armé ou déclenché → proposer DISARM.
   AlarmCommand get nextCommand => switch (_alarmState) {
-        AlarmState.armed || AlarmState.triggered => AlarmCommand.disarm,
+        AlarmState.armed || AlarmState.armedNight || AlarmState.triggered =>
+          AlarmCommand.disarm,
         AlarmState.disarmed || null => AlarmCommand.arm,
       };
 
   bool get canSendCommand => isLive && _pendingCommand == null && !_authenticating;
-
-  PirStatus get pirStatus => switch (_alarmState) {
-        AlarmState.armed => PirStatus.monitoring,
-        AlarmState.triggered => PirStatus.motionDetected,
-        AlarmState.disarmed || null => PirStatus.inactive,
-      };
 
   // ── Cycle de vie ───────────────────────────────────────────────────────────
 
@@ -128,7 +160,8 @@ class AlarmController extends ChangeNotifier {
     _subscriptions.addAll([
       _connection.alarmStates.listen(_onAlarmState),
       _connection.availability.listen(_onAvailability),
-      _connection.motions.listen(_onMotion),
+      _connection.detections.listen(_onDetection),
+      _connection.sensorStates.listen(_onSensorStates),
     ]);
     _connection.connect();
     _loadJournal();
@@ -151,9 +184,14 @@ class AlarmController extends ChangeNotifier {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   /// Envoie [nextCommand]. L'état ne changera qu'à la confirmation de l'ESP32.
-  /// Si la protection est activée, DISARM exige d'abord l'authentification.
-  Future<void> toggleAlarm() async {
-    final command = nextCommand;
+  Future<void> toggleAlarm() => requestCommand(nextCommand);
+
+  /// Arme en mode nuit : seuls la porte et la fenêtre sont surveillées.
+  Future<void> armNight() => requestCommand(AlarmCommand.armNight);
+
+  /// Envoie [command]. Si la protection est activée, DISARM exige d'abord
+  /// l'authentification.
+  Future<void> requestCommand(AlarmCommand command) async {
     if (!canSendCommand) return;
     if (command == AlarmCommand.disarm && requireAuthToDisarm) {
       _authenticating = true;
@@ -168,10 +206,10 @@ class AlarmController extends ChangeNotifier {
         return;
       }
     }
-    sendCommand(command);
+    _send(command);
   }
 
-  void sendCommand(AlarmCommand command) {
+  void _send(AlarmCommand command) {
     if (!canSendCommand) return;
     if (!_connection.sendCommand(command)) {
       _commandWarning = 'La commande ${_label(command)} n\'a pas pu être envoyée.';
@@ -211,6 +249,7 @@ class AlarmController extends ChangeNotifier {
     if (state == AlarmState.triggered && previous != AlarmState.triggered) {
       onIntrusion?.call();
     }
+    if (state != AlarmState.triggered) _intrusionSensor = null;
     _notify();
   }
 
@@ -222,8 +261,17 @@ class AlarmController extends ChangeNotifier {
     _notify();
   }
 
-  void _onMotion(MotionEvent event) {
-    _record(AlarmEvent.fromMotion(event));
+  void _onDetection(Detection event) {
+    // L'ESP32 publie la détection juste avant de passer en TRIGGERED.
+    if (_alarmState?.isArmed ?? false) _intrusionSensor = event.sensor;
+    _record(AlarmEvent.fromDetection(event));
+    _notify();
+  }
+
+  void _onSensorStates(Map<Sensor, bool> states) {
+    _sensorStates
+      ..clear()
+      ..addAll(states);
     _notify();
   }
 
@@ -294,6 +342,7 @@ class AlarmController extends ChangeNotifier {
 
   static String _label(AlarmCommand command) => switch (command) {
         AlarmCommand.arm => 'd\'activation',
+        AlarmCommand.armNight => 'd\'activation du mode nuit',
         AlarmCommand.disarm => 'de désactivation',
       };
 }

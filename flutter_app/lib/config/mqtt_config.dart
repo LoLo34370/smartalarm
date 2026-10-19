@@ -34,7 +34,7 @@ class MqttConfig {
   final int webSocketPort;
   final String webSocketPath;
 
-  /// MQTT over TLS (Android et autres plateformes natives).
+  /// MQTT over TLS (iOS, Android).
   final int tlsPort;
 
   final String topicBase;

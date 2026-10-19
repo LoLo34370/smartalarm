@@ -8,6 +8,7 @@ import 'package:mqtt_client/mqtt_client.dart';
 import '../config/mqtt_config.dart';
 import '../models/alarm_models.dart';
 import '../models/mqtt_topics.dart';
+import '../models/sensor.dart';
 import 'alarm_connection.dart';
 import 'mqtt_client_factory.dart';
 
@@ -48,15 +49,18 @@ class MqttService implements AlarmConnection {
   final ValueNotifier<String?> lastError = ValueNotifier(null);
 
   final _alarmStates = StreamController<AlarmState>.broadcast();
-  final _motions = StreamController<MotionEvent>.broadcast();
+  final _detections = StreamController<Detection>.broadcast();
   final _availability = StreamController<DeviceAvailability>.broadcast();
+  final _sensorStates = StreamController<Map<Sensor, bool>>.broadcast();
 
   @override
   Stream<AlarmState> get alarmStates => _alarmStates.stream;
   @override
-  Stream<MotionEvent> get motions => _motions.stream;
+  Stream<Detection> get detections => _detections.stream;
   @override
   Stream<DeviceAvailability> get availability => _availability.stream;
+  @override
+  Stream<Map<Sensor, bool>> get sensorStates => _sensorStates.stream;
 
   MqttClient? _client;
   StreamSubscription<List<MqttReceivedMessage<MqttMessage>>>? _updatesSubscription;
@@ -114,8 +118,9 @@ class MqttService implements AlarmConnection {
     disconnect();
     _disposed = true;
     _alarmStates.close();
-    _motions.close();
+    _detections.close();
     _availability.close();
+    _sensorStates.close();
     status.dispose();
     lastError.dispose();
   }
@@ -217,10 +222,13 @@ class MqttService implements AlarmConnection {
       final state = AlarmState.tryParse(payload);
       if (state != null) _alarmStates.add(state);
     } else if (topic == _topics.motion) {
-      final event = MotionEvent.tryParse(payload);
-      if (event != null) _motions.add(event);
+      final event = Detection.tryParse(payload);
+      if (event != null) _detections.add(event);
     } else if (topic == _topics.availability) {
       _availability.add(DeviceAvailability.parse(payload));
+    } else if (topic == _topics.sensors) {
+      final states = tryParseSensorStates(payload);
+      if (states != null) _sensorStates.add(states);
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartalarm/config/mqtt_config.dart';
 import 'package:smartalarm/controllers/settings_controller.dart';
 import 'package:smartalarm/models/alarm_event.dart';
+import 'package:smartalarm/models/sensor.dart';
 import 'package:smartalarm/widgets/formatters.dart';
 
 import 'helpers/fakes.dart';
@@ -10,14 +11,16 @@ void main() {
   group('AlarmEvent', () {
     test('aller-retour JSON pour le stockage', () {
       final event = AlarmEvent(
-        kind: AlarmEventKind.motion,
+        kind: AlarmEventKind.detection,
         at: DateTime(2026, 10, 19, 14, 5, 9),
         uptimeMs: 42000,
+        sensor: Sensor.window,
       );
       final back = AlarmEvent.tryFromJson(event.toJson())!;
-      expect(back.kind, AlarmEventKind.motion);
+      expect(back.kind, AlarmEventKind.detection);
       expect(back.at, event.at);
       expect(back.uptimeMs, 42000);
+      expect(back.sensor, Sensor.window);
     });
 
     test('ignore une entrée illisible', () {

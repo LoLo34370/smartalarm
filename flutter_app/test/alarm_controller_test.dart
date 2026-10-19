@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartalarm/controllers/alarm_controller.dart';
 import 'package:smartalarm/models/alarm_event.dart';
 import 'package:smartalarm/models/alarm_models.dart';
+import 'package:smartalarm/models/sensor.dart';
 import 'package:smartalarm/services/alarm_connection.dart';
 
 import 'helpers/fake_alarm_connection.dart';
@@ -29,7 +30,7 @@ void main() {
     expect(connection.connectCalls, 1);
     expect(controller.alarmState, isNull);
     expect(controller.canSendCommand, isFalse);
-    expect(controller.pirStatus, PirStatus.inactive);
+    expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.inactive);
   });
 
   test('affiche l\'état retained reçu à la connexion', () {
@@ -37,7 +38,7 @@ void main() {
     expect(controller.alarmState, AlarmState.armed);
     expect(controller.isLive, isTrue);
     expect(controller.nextCommand, AlarmCommand.disarm);
-    expect(controller.pirStatus, PirStatus.monitoring);
+    expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.monitoring);
   });
 
   test(
@@ -83,25 +84,26 @@ void main() {
 
   test('intrusion : sirène active, mouvement historisé, DISARM proposé', () {
     connection.goLive(AlarmState.armed);
-    connection.publishMotion(125000);
+    connection.publishDetection(125000);
     connection.publishState(AlarmState.triggered);
 
     expect(controller.isTriggered, isTrue);
-    expect(controller.isSirenActive, isTrue);
-    expect(controller.pirStatus, PirStatus.motionDetected);
+    expect(controller.isTriggered, isTrue);
+    expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.intrusion);
+    expect(controller.intrusionSensor, Sensor.pirSalon);
     expect(controller.nextCommand, AlarmCommand.disarm);
-    expect(controller.lastMotion?.uptimeMs, 125000);
+    expect(controller.lastDetection(Sensor.pirSalon)?.uptimeMs, 125000);
 
     controller.toggleAlarm();
     connection.publishState(AlarmState.disarmed);
     expect(connection.sentCommands.last, AlarmCommand.disarm);
-    expect(controller.isSirenActive, isFalse);
+    expect(controller.isTriggered, isFalse);
   });
 
   test('le journal garde les plus récentes, dans la limite fixée', () {
     connection.goLive(AlarmState.armed);
     for (final uptime in [1000, 2000, 3000, 4000]) {
-      connection.publishMotion(uptime);
+      connection.publishDetection(uptime);
     }
     expect(controller.journal.map((e) => e.uptimeMs), [4000, 3000, 2000]);
 
@@ -123,14 +125,14 @@ void main() {
       connection.publishState(
         AlarmState.armed,
       ); // republication sans changement
-      connection.publishMotion(5000);
+      connection.publishDetection(5000);
       connection.publishState(AlarmState.triggered);
       connection.publishState(AlarmState.disarmed);
 
       expect(controller.journal.map((e) => e.kind), [
         AlarmEventKind.disarmed,
         AlarmEventKind.triggered,
-        AlarmEventKind.motion,
+        AlarmEventKind.detection,
       ], reason: 'les 3 plus récentes (limite de ces tests) : ARMED est sorti');
     },
   );
@@ -170,6 +172,58 @@ void main() {
     expect(controller.isLive, isTrue);
   });
 
+  group('capteurs et mode nuit', () {
+    test('mode nuit : périmètre surveillé, PIR intérieur ignoré', () {
+      connection.goLive(AlarmState.armedNight);
+      expect(controller.sensorStatus(Sensor.door), SensorStatus.monitoring);
+      expect(controller.sensorStatus(Sensor.window), SensorStatus.monitoring);
+      expect(
+        controller.sensorStatus(Sensor.pirSalon),
+        SensorStatus.ignoredAtNight,
+      );
+      expect(controller.nextCommand, AlarmCommand.disarm);
+    });
+
+    test('ARM_NIGHT envoyé, puis journalisé à la confirmation', () {
+      connection.goLive(AlarmState.disarmed);
+      controller.armNight();
+      expect(connection.sentCommands, [AlarmCommand.armNight]);
+      expect(controller.pendingCommand, AlarmCommand.armNight);
+
+      connection.publishState(AlarmState.armedNight);
+      expect(controller.pendingCommand, isNull);
+      expect(controller.journal.single.kind, AlarmEventKind.armedNight);
+    });
+
+    test('intrusion par la porte : capteur identifié puis oublié', () {
+      connection.goLive(AlarmState.armedNight);
+      connection.publishDetection(9000, sensor: Sensor.door);
+      connection.publishState(AlarmState.triggered);
+
+      expect(controller.intrusionSensor, Sensor.door);
+      expect(controller.sensorStatus(Sensor.door), SensorStatus.intrusion);
+      expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.monitoring);
+      expect(controller.lastDetection(Sensor.door)?.uptimeMs, 9000);
+      expect(controller.lastDetection(Sensor.window), isNull);
+
+      connection.publishState(AlarmState.disarmed);
+      expect(controller.intrusionSensor, isNull);
+    });
+
+    test('état en direct des capteurs et contacts ouverts', () {
+      connection.goLive(AlarmState.disarmed);
+      expect(controller.isSensorActive(Sensor.window), isNull);
+
+      connection.publishSensors({
+        Sensor.pirSalon: true,
+        Sensor.door: false,
+        Sensor.window: true,
+      });
+      expect(controller.isSensorActive(Sensor.pirSalon), isTrue);
+      expect(controller.openContacts, [Sensor.window]);
+    });
+  });
+
   group('avec persistance, authentification et vibration', () {
     late FakeAlarmConnection conn;
     late MemoryJournalStore store;
@@ -206,11 +260,11 @@ void main() {
       () async {
         final c = build();
         // Entrée reçue avant la fin du chargement : elle doit rester en tête.
-        conn.publishMotion(1000, at: DateTime(2026, 10, 19, 11));
+        conn.publishDetection(1000, at: DateTime(2026, 10, 19, 11));
         await pumpEventQueue();
 
         expect(c.journal.map((e) => e.kind), [
-          AlarmEventKind.motion,
+          AlarmEventKind.detection,
           AlarmEventKind.armed,
         ]);
         expect(store.saved.length, 2, reason: 'rien de perdu à la sauvegarde');

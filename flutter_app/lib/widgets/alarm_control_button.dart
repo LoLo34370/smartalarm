@@ -5,6 +5,7 @@ import '../models/alarm_models.dart';
 
 /// Bouton principal. Il envoie une commande et attend la confirmation de
 /// l'ESP32 : il n'affiche jamais un état qui n'a pas été confirmé.
+/// Désarmé, un second bouton propose le mode nuit.
 class AlarmControlButton extends StatelessWidget {
   const AlarmControlButton({
     super.key,
@@ -14,6 +15,8 @@ class AlarmControlButton extends StatelessWidget {
     required this.enabled,
     required this.disabledReason,
     required this.onPressed,
+    this.onArmNight,
+    this.armWarning,
     this.isAuthenticating = false,
     this.requireAuthToDisarm = false,
   });
@@ -27,6 +30,12 @@ class AlarmControlButton extends StatelessWidget {
   final String? disabledReason;
   final VoidCallback onPressed;
 
+  /// Armement en mode nuit (bouton masqué si `null`).
+  final VoidCallback? onArmNight;
+
+  /// Avertissement affiché avant l'armement (porte ou fenêtre ouverte).
+  final String? armWarning;
+
   /// La demande Face ID / Touch ID / code est à l'écran.
   final bool isAuthenticating;
 
@@ -36,12 +45,15 @@ class AlarmControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPending = pendingCommand != null || isAuthenticating;
-    final (label, icon, color) = switch (nextCommand) {
-      AlarmCommand.arm => ('Activer l\'alarme', Icons.lock_rounded, AppColors.protected),
+    final (label, icon, baseColor) = switch (nextCommand) {
+      AlarmCommand.arm || AlarmCommand.armNight =>
+        ('Activer l\'alarme', Icons.lock_rounded, AppColors.protected),
       AlarmCommand.disarm when isTriggered =>
         ('Arrêter la sirène et désactiver', Icons.notifications_off_rounded, AppColors.alert),
       AlarmCommand.disarm => ('Désactiver l\'alarme', Icons.lock_open_rounded, AppColors.textPrimary),
     };
+    // Pendant l'attente du mode nuit, le bouton prend la couleur du mode nuit.
+    final color = pendingCommand == AlarmCommand.armNight ? AppColors.night : baseColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -66,6 +78,39 @@ class AlarmControlButton extends StatelessWidget {
             _ => label,
           }),
         ),
+        if (onArmNight != null && nextCommand == AlarmCommand.arm && !isPending) ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: enabled ? onArmNight : null,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.night,
+              minimumSize: const Size.fromHeight(52),
+              side: BorderSide(color: AppColors.night.withValues(alpha: enabled ? 0.5 : 0.2)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+            icon: const Icon(Icons.bedtime_rounded),
+            label: const Text('Mode nuit (porte et fenêtre)'),
+          ),
+        ],
+        if (armWarning != null && nextCommand == AlarmCommand.arm && !isPending) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.sensor_door_outlined, size: 16, color: AppColors.warning),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(armWarning!,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: AppColors.warning)),
+              ),
+            ],
+          ),
+        ],
         if (requireAuthToDisarm && nextCommand == AlarmCommand.disarm && !isPending) ...[
           const SizedBox(height: 8),
           Row(

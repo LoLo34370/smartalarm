@@ -1,4 +1,4 @@
 tags:
+  # Tests contre le vrai broker : exclus avec --exclude-tags live,
+  # lancés seuls avec --tags live (voir docs/setup.md).
   live:
-    # Tests contre le vrai broker : lancés uniquement avec --tags live
-    skip: false

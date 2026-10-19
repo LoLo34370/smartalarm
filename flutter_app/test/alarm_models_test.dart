@@ -3,12 +3,14 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smartalarm/models/alarm_models.dart';
 import 'package:smartalarm/models/mqtt_topics.dart';
+import 'package:smartalarm/models/sensor.dart';
 
 void main() {
   group('AlarmState.tryParse', () {
-    test('décode les trois états publiés par l\'ESP32', () {
+    test('décode les quatre états publiés par l\'ESP32', () {
       expect(AlarmState.tryParse('{"state":"DISARMED"}'), AlarmState.disarmed);
       expect(AlarmState.tryParse('{"state":"ARMED"}'), AlarmState.armed);
+      expect(AlarmState.tryParse('{"state":"ARMED_NIGHT"}'), AlarmState.armedNight);
       expect(AlarmState.tryParse('{"state":"TRIGGERED"}'), AlarmState.triggered);
     });
 
@@ -23,6 +25,7 @@ void main() {
 
   test('AlarmCommand produit le JSON attendu par l\'ESP32', () {
     expect(jsonDecode(AlarmCommand.arm.toPayload()), {'command': 'ARM'});
+    expect(jsonDecode(AlarmCommand.armNight.toPayload()), {'command': 'ARM_NIGHT'});
     expect(jsonDecode(AlarmCommand.disarm.toPayload()), {'command': 'DISARM'});
   });
 
@@ -32,22 +35,51 @@ void main() {
     expect(DeviceAvailability.parse(''), DeviceAvailability.unknown);
   });
 
-  group('MotionEvent.tryParse', () {
+  group('Detection.tryParse', () {
     test('décode une détection et l\'horodate à la réception', () {
       final now = DateTime(2026, 10, 19, 10);
-      final event = MotionEvent.tryParse(
-        '{"event":"MOTION_DETECTED","uptimeMs":125000}',
+      final event = Detection.tryParse(
+        '{"event":"MOTION_DETECTED","sensor":"pir_salon","uptimeMs":125000}',
         receivedAt: now,
       );
       expect(event?.uptimeMs, 125000);
       expect(event?.receivedAt, now);
+      expect(event?.sensor, Sensor.pirSalon);
+    });
+
+    test('décode le capteur à l\'origine de la détection', () {
+      final event = Detection.tryParse(
+        '{"event":"OPENING_DETECTED","sensor":"door","uptimeMs":7000}',
+      );
+      expect(event?.sensor, Sensor.door);
+      expect(
+        Detection.tryParse('{"event":"OPENING_DETECTED","sensor":"garage","uptimeMs":1}'),
+        isNull,
+      );
     });
 
     test('rejette un événement inconnu ou incomplet', () {
-      expect(MotionEvent.tryParse('{"event":"OTHER","uptimeMs":1}'), isNull);
-      expect(MotionEvent.tryParse('{"event":"MOTION_DETECTED"}'), isNull);
-      expect(MotionEvent.tryParse('pas du json'), isNull);
+      expect(Detection.tryParse('{"event":"OTHER","uptimeMs":1}'), isNull);
+      expect(Detection.tryParse('{"event":"MOTION_DETECTED","sensor":"pir_salon"}'), isNull);
+      expect(Detection.tryParse('{"event":"MOTION_DETECTED","uptimeMs":1}'), isNull);
+      expect(Detection.tryParse('pas du json'), isNull);
     });
+  });
+
+  test('tryParseSensorStates', () {
+    expect(
+      tryParseSensorStates('{"pir_salon":"ACTIVE","door":"CLOSED","window":"OPEN","x":"OPEN"}'),
+      {Sensor.pirSalon: true, Sensor.door: false, Sensor.window: true},
+    );
+    expect(tryParseSensorStates('{"door":"?"}'), isEmpty);
+    expect(tryParseSensorStates(''), isNull);
+  });
+
+  test('le mode nuit ne surveille que le périmètre', () {
+    expect(Sensor.door.isMonitoredIn(AlarmState.armedNight), isTrue);
+    expect(Sensor.pirSalon.isMonitoredIn(AlarmState.armedNight), isFalse);
+    expect(Sensor.pirSalon.isMonitoredIn(AlarmState.armed), isTrue);
+    expect(Sensor.window.isMonitoredIn(AlarmState.disarmed), isFalse);
   });
 
   test('MqttTopics construit les topics à partir de la base', () {
@@ -57,6 +89,7 @@ void main() {
       'smartalarm/demo01/state',
       'smartalarm/demo01/motion',
       'smartalarm/demo01/availability',
+      'smartalarm/demo01/sensors',
     ]);
   });
 }

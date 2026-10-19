@@ -4,7 +4,7 @@ import '../config/app_theme.dart';
 import '../models/alarm_models.dart';
 import 'pulse.dart';
 
-/// Grande carte d'état : « Maison protégée », « Alarme désactivée »,
+/// Grande carte d'état : « Maison protégée », « Mode nuit », « Alarme désactivée »,
 /// « Intrusion détectée », ou chargement tant qu'aucun état n'est reçu.
 class AlarmStatusCard extends StatelessWidget {
   const AlarmStatusCard({
@@ -122,7 +122,11 @@ class _StatusVisual {
     }
     return switch (state) {
       AlarmState.armed => const _StatusVisual(Icons.verified_user_rounded, 'Maison protégée',
-          'L\'alarme est activée, le capteur surveille.', [Color(0xFF43A047), AppColors.protected]),
+          'L\'alarme est activée, tous les capteurs surveillent.',
+          [Color(0xFF43A047), AppColors.protected]),
+      AlarmState.armedNight => const _StatusVisual(Icons.bedtime_rounded, 'Mode nuit',
+          'Porte et fenêtre surveillées. Vous pouvez circuler dans la maison.',
+          [Color(0xFF3F51B5), AppColors.night]),
       AlarmState.triggered => const _StatusVisual(Icons.warning_amber_rounded,
           'Intrusion détectée', 'La sirène est en marche. Désactivez l\'alarme pour l\'arrêter.',
           [Color(0xFFE53935), AppColors.alert]),

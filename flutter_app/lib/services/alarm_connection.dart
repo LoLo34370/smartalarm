@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/alarm_models.dart';
+import '../models/sensor.dart';
 
 /// État de la connexion de l'application au broker MQTT.
 enum BrokerStatus { disconnected, connecting, connected, reconnecting }
@@ -11,8 +12,11 @@ abstract interface class AlarmConnection {
   ValueListenable<BrokerStatus> get status;
   ValueListenable<String?> get lastError;
   Stream<AlarmState> get alarmStates;
-  Stream<MotionEvent> get motions;
+  Stream<Detection> get detections;
   Stream<DeviceAvailability> get availability;
+
+  /// État courant des capteurs (`true` = actif : mouvement, ouverture).
+  Stream<Map<Sensor, bool>> get sensorStates;
 
   Future<void> connect();
   bool sendCommand(AlarmCommand command);

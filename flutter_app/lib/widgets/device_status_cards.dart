@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../config/app_theme.dart';
 import '../controllers/alarm_controller.dart';
+import '../models/sensor.dart';
 import 'formatters.dart';
 import 'pulse.dart';
 
@@ -61,45 +62,110 @@ class InfoCard extends StatelessWidget {
   }
 }
 
-/// Statut du capteur PIR, déduit de l'état publié par l'ESP32.
-class PirStatusCard extends StatelessWidget {
-  const PirStatusCard({super.key, required this.status, required this.lastMotionAt});
+/// Ligne de [SensorsCard].
+typedef SensorEntry = ({
+  Sensor sensor,
+  SensorStatus status,
+  bool? isActive,
+  DateTime? lastDetectionAt,
+});
 
-  final PirStatus status;
-  final DateTime? lastMotionAt;
+/// Capteurs de la maison : état en direct et rôle dans le mode courant.
+class SensorsCard extends StatelessWidget {
+  const SensorsCard({super.key, required this.entries});
+
+  final List<SensorEntry> entries;
 
   @override
   Widget build(BuildContext context) {
-    final detail = lastMotionAt == null
-        ? 'Aucune détection reçue'
-        : 'Dernière détection : ${formatShortDateTime(lastMotionAt!)}';
-    return switch (status) {
-      PirStatus.inactive => InfoCard(
-          icon: Icons.sensors_off_rounded,
-          title: 'Capteur de mouvement',
-          value: 'Inactif',
-          detail: detail,
-          color: AppColors.inactive,
-          background: AppColors.inactiveSoft,
+    final textTheme = Theme.of(context).textTheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Capteurs',
+                style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            for (final entry in entries) _SensorRow(entry: entry),
+          ],
         ),
-      PirStatus.monitoring => InfoCard(
-          icon: Icons.sensors_rounded,
-          title: 'Capteur de mouvement',
-          value: 'Surveillance',
-          detail: detail,
-          color: AppColors.protected,
-          background: AppColors.protectedSoft,
-        ),
-      PirStatus.motionDetected => InfoCard(
-          icon: Icons.directions_run_rounded,
-          title: 'Capteur de mouvement',
-          value: 'Mouvement !',
-          detail: detail,
-          color: AppColors.alert,
-          background: AppColors.alertSoft,
-          animate: true,
-        ),
+      ),
+    );
+  }
+}
+
+class _SensorRow extends StatelessWidget {
+  const _SensorRow({required this.entry});
+
+  final SensorEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final (statusLabel, color, background) = switch (entry.status) {
+      SensorStatus.inactive => ('Inactif', AppColors.inactive, AppColors.inactiveSoft),
+      SensorStatus.ignoredAtNight => ('Ignoré la nuit', AppColors.night, AppColors.nightSoft),
+      SensorStatus.monitoring => ('Surveillé', AppColors.protected, AppColors.protectedSoft),
+      SensorStatus.intrusion => ('Intrusion !', AppColors.alert, AppColors.alertSoft),
     };
+    final sensor = entry.sensor;
+    final icon = switch (sensor) {
+      Sensor.pirSalon => Icons.sensors_rounded,
+      Sensor.door => Icons.door_front_door_outlined,
+      Sensor.window => Icons.window_outlined,
+    };
+    final live = switch ((entry.isActive, sensor.isContact)) {
+      (null, _) => 'État inconnu',
+      (true, true) => 'Ouverte',
+      (false, true) => 'Fermée',
+      (true, false) => 'Mouvement en cours',
+      (false, false) => 'Aucun mouvement',
+    };
+    final last = entry.lastDetectionAt;
+    final detail =
+        last == null ? live : '$live · dernière détection ${formatShortDateTime(last)}';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(12)),
+            child: Pulse(
+              active: entry.status == SensorStatus.intrusion,
+              child: Icon(icon, size: 20, color: color),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(sensor.label,
+                    style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                Text(detail,
+                    style: textTheme.bodySmall?.copyWith(
+                      color: entry.isActive == true && sensor.isContact
+                          ? AppColors.warning
+                          : AppColors.textSecondary,
+                    )),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: background, borderRadius: BorderRadius.circular(999)),
+            child: Text(statusLabel,
+                style: textTheme.labelMedium?.copyWith(color: color, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      ),
+    );
   }
 }
 

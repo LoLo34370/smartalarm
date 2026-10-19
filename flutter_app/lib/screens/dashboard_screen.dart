@@ -117,6 +117,8 @@ class DashboardScreen extends StatelessWidget {
         enabled: controller.canSendCommand,
         disabledReason: _disabledReason(),
         onPressed: controller.toggleAlarm,
+        isAuthenticating: controller.isAuthenticating,
+        requireAuthToDisarm: controller.requireAuthToDisarm,
       );
 
   String? _disabledReason() {

@@ -44,12 +44,15 @@ void main() {
 
   group('SettingsController', () {
     late MemorySettingsStore store;
+    late FakeAuthenticator auth;
     late SettingsController settings;
 
     setUp(() async {
       store = MemorySettingsStore();
+      auth = FakeAuthenticator();
       settings = SettingsController(
         store: store,
+        authenticator: auth,
         buildBrokerConfig: testBrokerConfig,
       );
     });
@@ -69,6 +72,7 @@ void main() {
 
       final reloaded = SettingsController(
         store: store,
+        authenticator: auth,
         buildBrokerConfig: testBrokerConfig,
       );
       await reloaded.load();
@@ -79,6 +83,25 @@ void main() {
       expect(store.broker, isNull);
     });
 
+    test('la protection Face ID n\'est activée qu\'après une authentification réussie', () async {
+      await settings.load();
+      auth.accept = false;
+      expect(await settings.setRequireAuthToDisarm(true), isFalse);
+      expect(settings.requireAuthToDisarm, isFalse);
+
+      auth.accept = true;
+      expect(await settings.setRequireAuthToDisarm(true), isTrue);
+      expect(settings.requireAuthToDisarm, isTrue);
+      expect(store.requireAuth, isTrue);
+    });
+
+    test('pas de protection possible sans authentification sur l\'appareil', () async {
+      auth.available = false;
+      store.requireAuth = true;
+      await settings.load();
+      expect(settings.requireAuthToDisarm, isFalse);
+      expect(await settings.setRequireAuthToDisarm(true), isFalse);
+    });
   });
 
   group('formatDay', () {

@@ -1,5 +1,6 @@
 package fr.smartalarm.smartalarm
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// FlutterFragmentActivity : requis par local_auth (dialogue biométrique Android).
+class MainActivity : FlutterFragmentActivity()

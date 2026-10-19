@@ -170,9 +170,10 @@ void main() {
     expect(controller.isLive, isTrue);
   });
 
-  group('avec persistance', () {
+  group('avec persistance et authentification', () {
     late FakeAlarmConnection conn;
     late MemoryJournalStore store;
+    late FakeAuthenticator auth;
     AlarmController? ctrl;
 
     setUp(() {
@@ -180,6 +181,7 @@ void main() {
       store = MemoryJournalStore([
         AlarmEvent(kind: AlarmEventKind.armed, at: DateTime(2026, 10, 18, 9)),
       ]);
+      auth = FakeAuthenticator();
     });
 
     tearDown(() {
@@ -187,10 +189,12 @@ void main() {
       conn.dispose();
     });
 
-    AlarmController build() =>
+    AlarmController build({bool requireAuth = false}) =>
         ctrl = AlarmController(
           conn,
           journalStore: store,
+          authenticator: auth,
+          requireAuthToDisarm: requireAuth,
           clock: () => DateTime(2026, 10, 19, 12),
         )..start();
 
@@ -216,5 +220,31 @@ void main() {
       },
     );
 
+    test(
+      'DISARM protégé : envoyé seulement si l\'identité est confirmée',
+      () async {
+        final c = build(requireAuth: true);
+        conn.goLive(AlarmState.armed);
+
+        auth.accept = false;
+        await c.toggleAlarm();
+        expect(conn.sentCommands, isEmpty);
+        expect(c.commandWarning, contains('identité non confirmée'));
+        expect(c.canSendCommand, isTrue);
+
+        auth.accept = true;
+        await c.toggleAlarm();
+        expect(conn.sentCommands, [AlarmCommand.disarm]);
+        expect(auth.reasons, hasLength(2));
+      },
+    );
+
+    test('ARM n\'exige jamais d\'authentification', () async {
+      final c = build(requireAuth: true);
+      conn.goLive(AlarmState.disarmed);
+      await c.toggleAlarm();
+      expect(conn.sentCommands, [AlarmCommand.arm]);
+      expect(auth.reasons, isEmpty);
+    });
   });
 }

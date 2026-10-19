@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../models/alarm_event.dart';
 import '../models/alarm_models.dart';
 import '../services/alarm_connection.dart';
+import '../services/device_authenticator.dart';
 import '../services/journal_store.dart';
 
 /// Ce que le capteur PIR signifie pour l'utilisateur, déduit de l'état publié.
@@ -23,12 +24,17 @@ class AlarmController extends ChangeNotifier {
     this.commandTimeout = const Duration(seconds: 10),
     this.historyLimit = 200,
     JournalStore? journalStore,
+    DeviceAuthenticator? authenticator,
+    bool requireAuthToDisarm = false,
     DateTime Function()? clock,
   })  : _journalStore = journalStore,
+        _authenticator = authenticator,
+        _requireAuthToDisarm = requireAuthToDisarm,
         _clock = clock ?? DateTime.now;
 
   final AlarmConnection _connection;
   final JournalStore? _journalStore;
+  final DeviceAuthenticator? _authenticator;
   final DateTime Function() _clock;
 
   /// Délai au-delà duquel une commande non confirmée est signalée.
@@ -43,6 +49,8 @@ class AlarmController extends ChangeNotifier {
   bool _started = false;
   bool _disposed = false;
   bool _journalLoaded = false;
+  bool _authenticating = false;
+  bool _requireAuthToDisarm;
 
   AlarmState? _alarmState;
   DeviceAvailability _availability = DeviceAvailability.unknown;
@@ -71,6 +79,17 @@ class AlarmController extends ChangeNotifier {
   AlarmEvent? get lastMotion =>
       _journal.where((e) => e.kind == AlarmEventKind.motion).firstOrNull;
 
+  /// Une confirmation Face ID / Touch ID / code est demandée avant DISARM.
+  bool get requireAuthToDisarm => _requireAuthToDisarm && _authenticator != null;
+  set requireAuthToDisarm(bool value) {
+    if (value == _requireAuthToDisarm) return;
+    _requireAuthToDisarm = value;
+    _notify();
+  }
+
+  /// La demande d'authentification système est affichée.
+  bool get isAuthenticating => _authenticating;
+
   bool get isBrokerConnected => brokerStatus == BrokerStatus.connected;
   bool get isDeviceOnline => _availability == DeviceAvailability.online;
 
@@ -86,7 +105,7 @@ class AlarmController extends ChangeNotifier {
         AlarmState.disarmed || null => AlarmCommand.arm,
       };
 
-  bool get canSendCommand => isLive && _pendingCommand == null;
+  bool get canSendCommand => isLive && _pendingCommand == null && !_authenticating;
 
   PirStatus get pirStatus => switch (_alarmState) {
         AlarmState.armed => PirStatus.monitoring,
@@ -128,7 +147,25 @@ class AlarmController extends ChangeNotifier {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   /// Envoie [nextCommand]. L'état ne changera qu'à la confirmation de l'ESP32.
-  void toggleAlarm() => sendCommand(nextCommand);
+  /// Si la protection est activée, DISARM exige d'abord l'authentification.
+  Future<void> toggleAlarm() async {
+    final command = nextCommand;
+    if (!canSendCommand) return;
+    if (command == AlarmCommand.disarm && requireAuthToDisarm) {
+      _authenticating = true;
+      _notify();
+      final confirmed = await _authenticator!
+          .authenticate('Confirmez votre identité pour désactiver l\'alarme');
+      _authenticating = false;
+      if (_disposed) return;
+      if (!confirmed) {
+        _commandWarning = 'Désactivation annulée : identité non confirmée.';
+        _notify();
+        return;
+      }
+    }
+    sendCommand(command);
+  }
 
   void sendCommand(AlarmCommand command) {
     if (!canSendCommand) return;

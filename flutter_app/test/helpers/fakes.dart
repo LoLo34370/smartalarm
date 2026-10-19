@@ -1,5 +1,6 @@
 import 'package:smartalarm/config/mqtt_config.dart';
 import 'package:smartalarm/models/alarm_event.dart';
+import 'package:smartalarm/services/device_authenticator.dart';
 import 'package:smartalarm/services/journal_store.dart';
 import 'package:smartalarm/services/settings_store.dart';
 
@@ -23,11 +24,34 @@ class MemoryJournalStore implements JournalStore {
 /// Réglages stockés en mémoire.
 class MemorySettingsStore implements SettingsStore {
   MqttConfig? broker;
+  bool requireAuth = false;
 
   @override
   Future<MqttConfig?> loadBrokerConfig() async => broker;
   @override
   Future<void> saveBrokerConfig(MqttConfig? config) async => broker = config;
+  @override
+  Future<bool> loadRequireAuthToDisarm() async => requireAuth;
+  @override
+  Future<void> saveRequireAuthToDisarm(bool value) async => requireAuth = value;
+}
+
+/// Face ID simulé : on choisit la réponse de l'utilisateur.
+class FakeAuthenticator implements DeviceAuthenticator {
+  FakeAuthenticator({this.available = true, this.accept = true});
+
+  bool available;
+  bool accept;
+  final List<String> reasons = [];
+
+  @override
+  Future<bool> isAvailable() async => available;
+
+  @override
+  Future<bool> authenticate(String reason) async {
+    reasons.add(reason);
+    return accept;
+  }
 }
 
 const testBrokerConfig = MqttConfig(

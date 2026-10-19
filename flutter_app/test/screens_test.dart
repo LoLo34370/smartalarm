@@ -52,6 +52,7 @@ void main() {
       store = MemorySettingsStore();
       settings = SettingsController(
         store: store,
+        authenticator: FakeAuthenticator(available: false),
         buildBrokerConfig: testBrokerConfig,
       );
       await settings.load();

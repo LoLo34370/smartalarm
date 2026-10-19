@@ -37,6 +37,7 @@ dependencies:
   mqtt_client: ^10.8.0
   shared_preferences: ^2.5.3
   flutter_secure_storage: ^10.3.4
+  local_auth: ^2.3.0
 
 dev_dependencies:
   flutter_test:

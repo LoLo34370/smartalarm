@@ -7,20 +7,24 @@ import 'controllers/settings_controller.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/settings_screen.dart';
 import 'services/alarm_connection.dart';
+import 'services/device_authenticator.dart';
 import 'services/journal_store.dart';
 import 'services/mqtt_service.dart';
 import 'services/settings_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final authenticator = LocalAuthAuthenticator();
   final settings = SettingsController(
     store: DeviceSettingsStore(),
+    authenticator: authenticator,
     buildBrokerConfig: MqttConfig.fromEnvironment(),
   );
   await settings.load();
   runApp(SmartAlarmApp(
     settings: settings,
     journalStore: SharedPreferencesJournalStore(),
+    authenticator: authenticator,
   ));
 }
 
@@ -31,11 +35,13 @@ class SmartAlarmApp extends StatefulWidget {
     super.key,
     required this.settings,
     this.journalStore,
+    this.authenticator,
     this.connectionFactory = _mqttConnection,
   });
 
   final SettingsController settings;
   final JournalStore? journalStore;
+  final DeviceAuthenticator? authenticator;
 
   /// Crée la connexion au broker (remplacée par un faux dans les tests).
   final AlarmConnectionFactory connectionFactory;
@@ -67,10 +73,13 @@ class _SmartAlarmAppState extends State<SmartAlarmApp> {
     _controller = AlarmController(
       _connection,
       journalStore: widget.journalStore,
+      authenticator: widget.authenticator,
+      requireAuthToDisarm: _settings.requireAuthToDisarm,
     )..start();
   }
 
   void _onSettingsChanged() {
+    _controller.requireAuthToDisarm = _settings.requireAuthToDisarm;
     if (_settings.brokerConfig == _brokerConfig) return;
 
     // Nouveau broker : on repart d'une connexion neuve. L'ancienne est libérée

@@ -5,7 +5,7 @@ import '../config/app_theme.dart';
 import '../config/mqtt_config.dart';
 import '../controllers/settings_controller.dart';
 
-/// Réglages : broker MQTT (sans recompiler) et données.
+/// Réglages : broker MQTT (sans recompiler), protection du désarmement, données.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
@@ -82,6 +82,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _reset() => _run(widget.settings.resetBrokerConfig,
       'Configuration de compilation rétablie : reconnexion en cours…');
 
+  Future<void> _toggleAuth(bool value) async {
+    final ok = await widget.settings.setRequireAuthToDisarm(value);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Identité non confirmée : la protection n\'a pas été activée.'),
+      ));
+    }
+  }
+
   void _clearJournal() {
     widget.onClearJournal();
     setState(() => _journalLength = 0);
@@ -104,6 +113,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
                   children: [
                     _brokerSection(),
+                    const SizedBox(height: 16),
+                    _securitySection(),
                     const SizedBox(height: 16),
                     _dataSection(),
                   ],
@@ -171,6 +182,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: const Text('Revenir à la configuration de compilation'),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _securitySection() {
+    final settings = widget.settings;
+    return _Section(
+      title: 'Sécurité',
+      children: [
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.face_rounded),
+          title: const Text('Confirmer la désactivation'),
+          subtitle: Text(settings.authAvailable
+              ? 'Face ID, Touch ID ou code de l\'appareil avant d\'envoyer DISARM.'
+              : 'Indisponible sur cet appareil (ou sur le web).'),
+          value: settings.requireAuthToDisarm,
+          onChanged: settings.authAvailable ? _toggleAuth : null,
+        ),
       ],
     );
   }

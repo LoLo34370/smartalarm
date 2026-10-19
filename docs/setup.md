@@ -129,16 +129,31 @@ Résultat constaté le 19/10/2026 sur le cluster du projet (ports 8883 et 8884) 
 | Buzzer | 2 (+) / 1 (−) | **D25** / GND |
 | LED verte (« ARMED ») | A → résistance 220 Ω | **D26** ; C → GND |
 | LED rouge (« ALERT ») | A → résistance 220 Ω | **D27** ; C → GND |
+| Contact porte (interrupteur de gauche) | 2 (commun) / 1 | **D14** / GND |
+| Contact fenêtre (interrupteur de droite) | 2 (commun) / 1 | **D32** / GND |
 
 ### Tester la logique locale (étape 3, sans MQTT)
 
 1. Cliquer sur ▶ (**Start the simulation**). Le moniteur série s'ouvre en bas.
 2. Au démarrage, attendu : `[STATE ] DISARMED`. Toutes les LEDs sont éteintes et le buzzer est muet.
-3. Cliquer sur le **PIR**, puis sur **Simulate Motion** : `mouvement ignoré (alarme désactivée)`.
+3. Cliquer sur le **PIR**, puis sur **Simulate Motion** : `pir_salon ignoré (alarme désactivée)`.
 4. Cliquer dans la zone de saisie du moniteur série, taper `ARM`, puis Entrée : `DISARMED -> ARMED`, LED verte allumée.
 5. **Simulate Motion** : `[MOTION] …`, puis `ARMED -> TRIGGERED`. La LED rouge clignote et la sirène sonne (activer le son du navigateur).
-6. Attendre environ 5 s : le PIR repasse à `LOW` (`[PIR   ] signal LOW`), mais l'alarme **reste** TRIGGERED.
+6. Attendre environ 5 s : le PIR repasse au repos (`[SENSOR] pir_salon IDLE`), mais l'alarme **reste** TRIGGERED.
 7. Taper `DISARM` : `TRIGGERED -> DISARMED`. Tout s'éteint et la sirène s'arrête.
+
+### Tester le mode nuit
+
+Les deux interrupteurs à glissière simulent les contacts : position reliée
+à GND = fermé. Basculer un interrupteur affiche `[SENSOR] door OPEN` ou
+`door CLOSED`. Si une porte apparaît ouverte au repos, la remettre en position
+fermée avant de commencer.
+
+1. Taper `ARM_NIGHT` : `DISARMED -> ARMED_NIGHT`, la LED verte clignote lentement.
+2. **Simulate Motion** sur le PIR : `pir_salon ignoré (mode nuit)`. Rien ne se déclenche.
+3. Basculer l'interrupteur de la **porte** : `[MOTION] {"event":"OPENING_DETECTED","sensor":"door",…}`,
+   puis `ARMED_NIGHT -> TRIGGERED`.
+4. Taper `DISARM`. Refermer la porte.
 
 > Le PIR de Wokwi reste à HIGH pendant `delayTime` = 5 s, puis ignore les
 > mouvements pendant `inhibitTime` = 1,2 s. Il faut donc attendre environ 6 s

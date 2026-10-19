@@ -7,9 +7,10 @@ l'appareil. Un second boîtier utiliserait `demo02`.
 
 | Topic | Émetteur | Récepteur | QoS | Retained | Payload |
 |-------|----------|-----------|-----|----------|---------|
-| `smartalarm/demo01/command` | Flutter | ESP32 | 1 | **non** | JSON `{"command": "ARM" \| "DISARM"}` |
-| `smartalarm/demo01/state` | ESP32 | Flutter | 1 | **oui** | JSON `{"state": "DISARMED" \| "ARMED" \| "TRIGGERED"}` |
-| `smartalarm/demo01/motion` | ESP32 | Flutter | 1 | **non** | JSON `{"event": "MOTION_DETECTED", "uptimeMs": <int>}` |
+| `smartalarm/demo01/command` | Flutter | ESP32 | 1 | **non** | JSON `{"command": "ARM" \| "ARM_NIGHT" \| "DISARM"}` |
+| `smartalarm/demo01/state` | ESP32 | Flutter | 1 | **oui** | JSON `{"state": "DISARMED" \| "ARMED" \| "ARMED_NIGHT" \| "TRIGGERED"}` |
+| `smartalarm/demo01/motion` | ESP32 | Flutter | 1 | **non** | JSON `{"event": "MOTION_DETECTED" \| "OPENING_DETECTED", "sensor": <id>, "uptimeMs": <int>}` |
+| `smartalarm/demo01/sensors` | ESP32 | Flutter | 1 | **oui** | JSON `{"pir_salon": "IDLE" \| "ACTIVE", "door": "CLOSED" \| "OPEN", "window": "CLOSED" \| "OPEN"}` |
 | `smartalarm/demo01/availability` | ESP32 (et broker via LWT) | Flutter | 1 | **oui** | texte brut `online` / `offline` |
 
 > **Note PubSubClient** : côté ESP32, PubSubClient ne sait **publier** qu'en
@@ -29,8 +30,14 @@ l'appareil. Un second boîtier utiliserait `demo02`.
 { "command": "ARM" }
 ```
 ```json
+{ "command": "ARM_NIGHT" }
+```
+```json
 { "command": "DISARM" }
 ```
+
+`ARM` arme en mode total (tous les capteurs), `ARM_NIGHT` en mode nuit
+(porte et fenêtre seulement, voir [Architecture](architecture.md#machine-à-états-esp32)).
 
 - **Jamais retained.** Sinon, un ESP32 qui redémarre ré-exécuterait une
   ancienne commande et pourrait s'armer tout seul.
@@ -50,15 +57,36 @@ l'appareil. Un second boîtier utiliserait `demo02`.
 ### `motion` (ESP32 → Flutter)
 
 ```json
-{ "event": "MOTION_DETECTED", "uptimeMs": 125000 }
+{ "event": "MOTION_DETECTED", "sensor": "pir_salon", "uptimeMs": 125000 }
+```
+```json
+{ "event": "OPENING_DETECTED", "sensor": "door", "uptimeMs": 131000 }
 ```
 
-- Publié **une fois par nouvelle détection valide** : front montant du PIR
-  alors que l'alarme est `ARMED`.
+- Publié **une fois par nouvelle détection valide** : front montant d'un
+  capteur surveillé dans l'état courant, ou de n'importe quel capteur pendant
+  `TRIGGERED` (pour l'historique).
+- `sensor` : `pir_salon`, `door` ou `window`. L'application considère un
+  message sans `sensor` (firmware antérieur) comme venant du PIR.
+- Le nom du topic est resté `motion` pour ne pas casser le contrat existant,
+  même s'il porte aussi les ouvertures.
 - `uptimeMs` = `millis()` de l'ESP32. L'ESP32 n'a pas d'horloge réelle (pas
   de NTP dans cette V1). Flutter horodate donc l'événement à sa réception
   pour l'historique.
 - Non retained : c'est un événement ponctuel, pas un état.
+
+### `sensors` (ESP32 → Flutter)
+
+```json
+{ "pir_salon": "IDLE", "door": "CLOSED", "window": "OPEN" }
+```
+
+- **Retained** : l'application connaît l'état des capteurs dès sa connexion,
+  par exemple une fenêtre restée ouverte avant d'armer.
+- Publié à chaque changement d'un capteur (dans les deux sens) et à chaque
+  connexion MQTT.
+- C'est un état en direct, indépendant du mode : un capteur ouvert alors que
+  l'alarme est désactivée apparaît ici, mais pas dans `motion`.
 
 ### `availability` (ESP32 / broker → Flutter)
 

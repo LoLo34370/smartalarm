@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-/// Couleurs sémantiques du projet : vert = protégé, rouge = alerte, gris = inactif.
+/// Couleurs sémantiques du projet : vert = protégé, bleu = mode nuit,
+/// rouge = alerte, gris = inactif.
 abstract final class AppColors {
   static const background = Color(0xFFF3F5F4);
   static const surface = Colors.white;
@@ -8,6 +9,8 @@ abstract final class AppColors {
 
   static const protected = Color(0xFF2E7D32);
   static const protectedSoft = Color(0xFFE6F2E7);
+  static const night = Color(0xFF303F9F);
+  static const nightSoft = Color(0xFFE8EAF6);
   static const alert = Color(0xFFC62828);
   static const alertSoft = Color(0xFFFCE8E8);
   static const inactive = Color(0xFF6B7470);

@@ -1,14 +1,20 @@
 import 'dart:convert';
 
+import 'sensor.dart';
+
 /// États métier publiés par l'ESP32 (source de vérité) sur `<base>/state`.
 enum AlarmState {
   disarmed('DISARMED'),
   armed('ARMED'),
+  armedNight('ARMED_NIGHT'),
   triggered('TRIGGERED');
 
   const AlarmState(this.wireValue);
 
   final String wireValue;
+
+  /// Armée, en mode total ou nuit (sans intrusion en cours).
+  bool get isArmed => this == armed || this == armedNight;
 
   /// Analyse `{"state":"ARMED"}`. Retourne `null` si le payload est invalide
   /// (ou vide : purge d'un message retained).
@@ -24,6 +30,7 @@ enum AlarmState {
 /// Commandes envoyées à l'ESP32 sur `<base>/command`.
 enum AlarmCommand {
   arm('ARM'),
+  armNight('ARM_NIGHT'),
   disarm('DISARM');
 
   const AlarmCommand(this.wireValue);
@@ -46,9 +53,17 @@ enum DeviceAvailability {
       };
 }
 
-/// Détection de mouvement publiée par l'ESP32 sur `<base>/motion`.
+/// Détection publiée par l'ESP32 sur `<base>/motion` : mouvement (PIR) ou
+/// ouverture (porte, fenêtre).
 class MotionEvent {
-  const MotionEvent({required this.uptimeMs, required this.receivedAt});
+  const MotionEvent({
+    required this.uptimeMs,
+    required this.receivedAt,
+    this.sensor = Sensor.pirSalon,
+  });
+
+  /// Capteur à l'origine de la détection.
+  final Sensor sensor;
 
   /// `millis()` de l'ESP32 au moment de la détection.
   final int uptimeMs;
@@ -56,13 +71,21 @@ class MotionEvent {
   /// Horodatage côté application (l'ESP32 n'a pas d'horloge réelle).
   final DateTime receivedAt;
 
-  /// Analyse `{"event":"MOTION_DETECTED","uptimeMs":125000}`.
+  /// Analyse `{"event":"OPENING_DETECTED","sensor":"door","uptimeMs":125000}`.
+  /// Sans `sensor` (firmware d'avant le mode nuit), c'est le PIR du salon.
   static MotionEvent? tryParse(String payload, {DateTime? receivedAt}) {
     final json = _decodeObject(payload);
-    if (json == null || json['event'] != 'MOTION_DETECTED') return null;
+    if (json == null) return null;
+    if (json['event'] != 'MOTION_DETECTED' && json['event'] != 'OPENING_DETECTED') return null;
     final uptime = json['uptimeMs'];
     if (uptime is! int) return null;
-    return MotionEvent(uptimeMs: uptime, receivedAt: receivedAt ?? DateTime.now());
+    final sensor = json.containsKey('sensor') ? Sensor.tryParse(json['sensor']) : Sensor.pirSalon;
+    if (sensor == null) return null;
+    return MotionEvent(
+      uptimeMs: uptime,
+      receivedAt: receivedAt ?? DateTime.now(),
+      sensor: sensor,
+    );
   }
 }
 

@@ -2,16 +2,23 @@ import 'package:flutter/material.dart';
 
 import '../config/app_theme.dart';
 import '../models/alarm_event.dart';
+import '../models/sensor.dart';
 import 'formatters.dart';
 
-/// Apparence d'une entrée du journal selon son type.
-({IconData icon, String title, Color color, Color background}) journalStyle(AlarmEventKind kind) =>
-    switch (kind) {
+/// Apparence d'une entrée du journal selon son type (et son capteur).
+({IconData icon, String title, Color color, Color background}) journalStyle(AlarmEvent event) =>
+    switch (event.kind) {
       AlarmEventKind.armed => (
           icon: Icons.lock_rounded,
           title: 'Alarme activée',
           color: AppColors.protected,
           background: AppColors.protectedSoft,
+        ),
+      AlarmEventKind.armedNight => (
+          icon: Icons.bedtime_rounded,
+          title: 'Mode nuit activé',
+          color: AppColors.night,
+          background: AppColors.nightSoft,
         ),
       AlarmEventKind.disarmed => (
           icon: Icons.lock_open_rounded,
@@ -24,6 +31,12 @@ import 'formatters.dart';
           title: 'Sirène déclenchée',
           color: AppColors.alert,
           background: AppColors.alertSoft,
+        ),
+      AlarmEventKind.motion when event.sensor?.isContact ?? false => (
+          icon: Icons.sensor_door_outlined,
+          title: 'Ouverture détectée',
+          color: AppColors.warning,
+          background: AppColors.warningSoft,
         ),
       AlarmEventKind.motion => (
           icon: Icons.directions_run_rounded,
@@ -45,8 +58,9 @@ class JournalEventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final style = journalStyle(event.kind);
+    final style = journalStyle(event);
     final uptime = event.uptimeMs;
+    final sensor = event.sensor;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -67,9 +81,11 @@ class JournalEventTile extends StatelessWidget {
                 Text(style.title,
                     style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 Text(
-                  uptime != null
-                      ? 'ESP32 allumé depuis ${formatUptime(uptime)}'
-                      : 'Confirmé par l\'ESP32',
+                  switch ((sensor, uptime)) {
+                    (final Sensor s, final int u) => '${s.label} · ESP32 allumé depuis ${formatUptime(u)}',
+                    (null, final int u) => 'ESP32 allumé depuis ${formatUptime(u)}',
+                    _ => 'Confirmé par l\'ESP32',
+                  },
                   style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
                 ),
               ],

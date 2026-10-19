@@ -36,7 +36,7 @@ void main() {
     expect(find.text('Sirène déclenchée'), findsOneWidget);
     expect(find.text('Alarme activée'), findsOneWidget);
 
-    await tester.tap(find.text('Mouvements'));
+    await tester.tap(find.text('Détections'));
     await tester.pumpAndSettle();
     expect(find.text('Mouvement détecté'), findsOneWidget);
     expect(find.text('Sirène déclenchée'), findsNothing);

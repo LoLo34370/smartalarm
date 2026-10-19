@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:smartalarm/config/app_theme.dart';
 import 'package:smartalarm/controllers/alarm_controller.dart';
 import 'package:smartalarm/models/alarm_models.dart';
+import 'package:smartalarm/models/sensor.dart';
 import 'package:smartalarm/screens/dashboard_screen.dart';
 
 import 'helpers/fake_alarm_connection.dart';
@@ -70,6 +71,33 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Maison protégée'), findsOneWidget);
     expect(find.text('Désactiver l\'alarme'), findsOneWidget);
+  });
+
+  testWidgets('mode nuit : ARM_NIGHT, PIR ignoré, intrusion par la fenêtre', (tester) async {
+    await pumpDashboard(tester, const Size(390, 844));
+    connection.goLive(AlarmState.disarmed);
+    connection.publishSensors({Sensor.pirSalon: false, Sensor.door: false, Sensor.window: true});
+    await tester.pump();
+    expect(find.textContaining('Fenêtre ouverte'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Mode nuit (porte et fenêtre)'));
+    await tester.tap(find.text('Mode nuit (porte et fenêtre)'));
+    await tester.pump();
+    expect(connection.sentCommands, [AlarmCommand.armNight]);
+
+    connection.publishState(AlarmState.armedNight);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Mode nuit'), findsOneWidget);
+    expect(find.text('Ignoré la nuit'), findsOneWidget);
+    expect(find.text('Surveillé'), findsNWidgets(2));
+
+    connection.publishMotion(8000, sensor: Sensor.window);
+    connection.publishState(AlarmState.triggered);
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.textContaining('Ouverture : Fenêtre.'), findsOneWidget);
+    expect(find.text('Intrusion !'), findsOneWidget);
+    expect(find.text('Ouverture détectée'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('ESP32 hors ligne : message explicite et bouton désactivé', (tester) async {

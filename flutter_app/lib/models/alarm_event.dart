@@ -7,7 +7,7 @@ enum AlarmEventKind {
   armedNight('ARMED_NIGHT'),
   disarmed('DISARMED'),
   triggered('TRIGGERED'),
-  motion('MOTION');
+  detection('MOTION');
 
   const AlarmEventKind(this.storageValue);
 
@@ -29,11 +29,11 @@ enum AlarmEventKind {
 class AlarmEvent {
   const AlarmEvent({required this.kind, required this.at, this.uptimeMs, this.sensor});
 
-  factory AlarmEvent.fromMotion(MotionEvent motion) => AlarmEvent(
-        kind: AlarmEventKind.motion,
-        at: motion.receivedAt,
-        uptimeMs: motion.uptimeMs,
-        sensor: motion.sensor,
+  factory AlarmEvent.fromDetection(Detection detection) => AlarmEvent(
+        kind: AlarmEventKind.detection,
+        at: detection.receivedAt,
+        uptimeMs: detection.uptimeMs,
+        sensor: detection.sensor,
       );
 
   final AlarmEventKind kind;
@@ -42,7 +42,7 @@ class AlarmEvent {
   /// `millis()` de l'ESP32, uniquement pour les détections.
   final int? uptimeMs;
 
-  /// Capteur à l'origine d'une détection (absent des entrées anciennes).
+  /// Capteur à l'origine d'une détection.
   final Sensor? sensor;
 
   Map<String, Object?> toJson() => {
@@ -65,7 +65,9 @@ class AlarmEvent {
       kind: kind,
       at: at,
       uptimeMs: uptime is int ? uptime : null,
-      sensor: Sensor.tryParse(json['sensor']),
+      // Les détections enregistrées avant l'ajout des contacts viennent du PIR.
+      sensor: Sensor.tryParse(json['sensor']) ??
+          (kind == AlarmEventKind.detection ? Sensor.pirSalon : null),
     );
   }
 }

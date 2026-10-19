@@ -35,33 +35,34 @@ void main() {
     expect(DeviceAvailability.parse(''), DeviceAvailability.unknown);
   });
 
-  group('MotionEvent.tryParse', () {
+  group('Detection.tryParse', () {
     test('décode une détection et l\'horodate à la réception', () {
       final now = DateTime(2026, 10, 19, 10);
-      final event = MotionEvent.tryParse(
-        '{"event":"MOTION_DETECTED","uptimeMs":125000}',
+      final event = Detection.tryParse(
+        '{"event":"MOTION_DETECTED","sensor":"pir_salon","uptimeMs":125000}',
         receivedAt: now,
       );
       expect(event?.uptimeMs, 125000);
       expect(event?.receivedAt, now);
-      expect(event?.sensor, Sensor.pirSalon, reason: 'ancien firmware : PIR');
+      expect(event?.sensor, Sensor.pirSalon);
     });
 
     test('décode le capteur à l\'origine de la détection', () {
-      final event = MotionEvent.tryParse(
+      final event = Detection.tryParse(
         '{"event":"OPENING_DETECTED","sensor":"door","uptimeMs":7000}',
       );
       expect(event?.sensor, Sensor.door);
       expect(
-        MotionEvent.tryParse('{"event":"OPENING_DETECTED","sensor":"garage","uptimeMs":1}'),
+        Detection.tryParse('{"event":"OPENING_DETECTED","sensor":"garage","uptimeMs":1}'),
         isNull,
       );
     });
 
     test('rejette un événement inconnu ou incomplet', () {
-      expect(MotionEvent.tryParse('{"event":"OTHER","uptimeMs":1}'), isNull);
-      expect(MotionEvent.tryParse('{"event":"MOTION_DETECTED"}'), isNull);
-      expect(MotionEvent.tryParse('pas du json'), isNull);
+      expect(Detection.tryParse('{"event":"OTHER","uptimeMs":1}'), isNull);
+      expect(Detection.tryParse('{"event":"MOTION_DETECTED","sensor":"pir_salon"}'), isNull);
+      expect(Detection.tryParse('{"event":"MOTION_DETECTED","uptimeMs":1}'), isNull);
+      expect(Detection.tryParse('pas du json'), isNull);
     });
   });
 

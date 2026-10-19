@@ -32,13 +32,13 @@ import 'formatters.dart';
           color: AppColors.alert,
           background: AppColors.alertSoft,
         ),
-      AlarmEventKind.motion when event.sensor?.isContact ?? false => (
+      AlarmEventKind.detection when event.sensor?.isContact ?? false => (
           icon: Icons.sensor_door_outlined,
           title: 'Ouverture détectée',
           color: AppColors.warning,
           background: AppColors.warningSoft,
         ),
-      AlarmEventKind.motion => (
+      AlarmEventKind.detection => (
           icon: Icons.directions_run_rounded,
           title: 'Mouvement détecté',
           color: AppColors.warning,
@@ -82,8 +82,8 @@ class JournalEventTile extends StatelessWidget {
                     style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                 Text(
                   switch ((sensor, uptime)) {
-                    (final Sensor s, final int u) => '${s.label} · ESP32 allumé depuis ${formatUptime(u)}',
-                    (null, final int u) => 'ESP32 allumé depuis ${formatUptime(u)}',
+                    (final Sensor s, final int u) =>
+                      '${s.label} · ESP32 allumé depuis ${formatUptime(u)}',
                     _ => 'Confirmé par l\'ESP32',
                   },
                   style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
@@ -120,8 +120,8 @@ class ActivityJournalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final now = DateTime.now();
-    final motionsToday = events
-        .where((e) => e.kind == AlarmEventKind.motion && isSameDay(e.at, now))
+    final detectionsToday = events
+        .where((e) => e.kind == AlarmEventKind.detection && isSameDay(e.at, now))
         .length;
     return Card(
       child: Padding(
@@ -145,9 +145,9 @@ class ActivityJournalCard extends StatelessWidget {
               ],
             ),
             Text(
-              motionsToday == 0
+              detectionsToday == 0
                   ? 'Aucune détection aujourd\'hui'
-                  : '$motionsToday détection${motionsToday > 1 ? 's' : ''} aujourd\'hui',
+                  : '$detectionsToday détection${detectionsToday > 1 ? 's' : ''} aujourd\'hui',
               style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),
             ),
             const SizedBox(height: 8),

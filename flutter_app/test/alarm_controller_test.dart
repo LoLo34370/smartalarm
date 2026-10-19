@@ -84,26 +84,26 @@ void main() {
 
   test('intrusion : sirène active, mouvement historisé, DISARM proposé', () {
     connection.goLive(AlarmState.armed);
-    connection.publishMotion(125000);
+    connection.publishDetection(125000);
     connection.publishState(AlarmState.triggered);
 
     expect(controller.isTriggered, isTrue);
-    expect(controller.isSirenActive, isTrue);
+    expect(controller.isTriggered, isTrue);
     expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.intrusion);
     expect(controller.intrusionSensor, Sensor.pirSalon);
     expect(controller.nextCommand, AlarmCommand.disarm);
-    expect(controller.lastMotion?.uptimeMs, 125000);
+    expect(controller.lastDetection(Sensor.pirSalon)?.uptimeMs, 125000);
 
     controller.toggleAlarm();
     connection.publishState(AlarmState.disarmed);
     expect(connection.sentCommands.last, AlarmCommand.disarm);
-    expect(controller.isSirenActive, isFalse);
+    expect(controller.isTriggered, isFalse);
   });
 
   test('le journal garde les plus récentes, dans la limite fixée', () {
     connection.goLive(AlarmState.armed);
     for (final uptime in [1000, 2000, 3000, 4000]) {
-      connection.publishMotion(uptime);
+      connection.publishDetection(uptime);
     }
     expect(controller.journal.map((e) => e.uptimeMs), [4000, 3000, 2000]);
 
@@ -125,14 +125,14 @@ void main() {
       connection.publishState(
         AlarmState.armed,
       ); // republication sans changement
-      connection.publishMotion(5000);
+      connection.publishDetection(5000);
       connection.publishState(AlarmState.triggered);
       connection.publishState(AlarmState.disarmed);
 
       expect(controller.journal.map((e) => e.kind), [
         AlarmEventKind.disarmed,
         AlarmEventKind.triggered,
-        AlarmEventKind.motion,
+        AlarmEventKind.detection,
       ], reason: 'les 3 plus récentes (limite de ces tests) : ARMED est sorti');
     },
   );
@@ -197,7 +197,7 @@ void main() {
 
     test('intrusion par la porte : capteur identifié puis oublié', () {
       connection.goLive(AlarmState.armedNight);
-      connection.publishMotion(9000, sensor: Sensor.door);
+      connection.publishDetection(9000, sensor: Sensor.door);
       connection.publishState(AlarmState.triggered);
 
       expect(controller.intrusionSensor, Sensor.door);
@@ -260,11 +260,11 @@ void main() {
       () async {
         final c = build();
         // Entrée reçue avant la fin du chargement : elle doit rester en tête.
-        conn.publishMotion(1000, at: DateTime(2026, 10, 19, 11));
+        conn.publishDetection(1000, at: DateTime(2026, 10, 19, 11));
         await pumpEventQueue();
 
         expect(c.journal.map((e) => e.kind), [
-          AlarmEventKind.motion,
+          AlarmEventKind.detection,
           AlarmEventKind.armed,
         ]);
         expect(store.saved.length, 2, reason: 'rien de perdu à la sauvegarde');

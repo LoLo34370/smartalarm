@@ -36,7 +36,7 @@ flutter_app/android/**/*.keystore
 flutter_app/android/app/debug/
 flutter_app/android/app/release/
 
-# iOS / macOS (si activés plus tard)
+# iOS
 flutter_app/ios/Pods/
 flutter_app/ios/Flutter/Generated.xcconfig
 flutter_app/ios/Flutter/flutter_export_environment.sh

@@ -55,12 +55,8 @@ enum DeviceAvailability {
 
 /// Détection publiée par l'ESP32 sur `<base>/motion` : mouvement (PIR) ou
 /// ouverture (porte, fenêtre).
-class MotionEvent {
-  const MotionEvent({
-    required this.uptimeMs,
-    required this.receivedAt,
-    this.sensor = Sensor.pirSalon,
-  });
+class Detection {
+  const Detection({required this.sensor, required this.uptimeMs, required this.receivedAt});
 
   /// Capteur à l'origine de la détection.
   final Sensor sensor;
@@ -72,20 +68,14 @@ class MotionEvent {
   final DateTime receivedAt;
 
   /// Analyse `{"event":"OPENING_DETECTED","sensor":"door","uptimeMs":125000}`.
-  /// Sans `sensor` (firmware d'avant le mode nuit), c'est le PIR du salon.
-  static MotionEvent? tryParse(String payload, {DateTime? receivedAt}) {
+  static Detection? tryParse(String payload, {DateTime? receivedAt}) {
     final json = _decodeObject(payload);
     if (json == null) return null;
     if (json['event'] != 'MOTION_DETECTED' && json['event'] != 'OPENING_DETECTED') return null;
+    final sensor = Sensor.tryParse(json['sensor']);
     final uptime = json['uptimeMs'];
-    if (uptime is! int) return null;
-    final sensor = json.containsKey('sensor') ? Sensor.tryParse(json['sensor']) : Sensor.pirSalon;
-    if (sensor == null) return null;
-    return MotionEvent(
-      uptimeMs: uptime,
-      receivedAt: receivedAt ?? DateTime.now(),
-      sensor: sensor,
-    );
+    if (sensor == null || uptime is! int) return null;
+    return Detection(sensor: sensor, uptimeMs: uptime, receivedAt: receivedAt ?? DateTime.now());
   }
 }
 

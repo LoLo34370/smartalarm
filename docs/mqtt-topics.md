@@ -15,8 +15,8 @@ l'appareil. Un second boîtier utiliserait `demo02`.
 
 > **Note PubSubClient** : côté ESP32, PubSubClient ne sait **publier** qu'en
 > QoS 0. En revanche, il peut s'abonner en QoS 1 et le Last Will peut être
-> déclaré en QoS 1. Les publications `state` et `motion` de l'ESP32 partiront
-> donc en QoS 0, ce qui est autorisé pour `state` par le cahier des charges.
+> déclaré en QoS 1. Les publications `state`, `motion` et `sensors` de l'ESP32
+> partent donc en QoS 0, ce qui est autorisé pour `state` par le cahier des charges.
 > Pour `motion`, c'est la limite de la bibliothèque imposée. L'impact est
 > faible, car la connexion TLS repose sur TCP, qui est fiable, et l'état
 > `TRIGGERED`, conservé en retained, porte de toute façon l'alerte. Flutter
@@ -66,8 +66,7 @@ l'appareil. Un second boîtier utiliserait `demo02`.
 - Publié **une fois par nouvelle détection valide** : front montant d'un
   capteur surveillé dans l'état courant, ou de n'importe quel capteur pendant
   `TRIGGERED` (pour l'historique).
-- `sensor` : `pir_salon`, `door` ou `window`. L'application considère un
-  message sans `sensor` (firmware antérieur) comme venant du PIR.
+- `sensor` : `pir_salon`, `door` ou `window`.
 - Le nom du topic est resté `motion` pour ne pas casser le contrat existant,
   même s'il porte aussi les ouvertures.
 - `uptimeMs` = `millis()` de l'ESP32. L'ESP32 n'a pas d'horloge réelle (pas

@@ -6,6 +6,7 @@ import 'package:smartalarm/controllers/settings_controller.dart';
 import 'package:smartalarm/main.dart';
 import 'package:smartalarm/models/alarm_event.dart';
 import 'package:smartalarm/models/alarm_models.dart';
+import 'package:smartalarm/models/sensor.dart';
 import 'package:smartalarm/screens/journal_screen.dart';
 
 import 'helpers/fake_alarm_connection.dart';
@@ -19,7 +20,12 @@ void main() {
       connection,
       journalStore: MemoryJournalStore([
         AlarmEvent(kind: AlarmEventKind.triggered, at: now),
-        AlarmEvent(kind: AlarmEventKind.motion, at: now, uptimeMs: 3000),
+        AlarmEvent(
+          kind: AlarmEventKind.detection,
+          at: now,
+          uptimeMs: 3000,
+          sensor: Sensor.pirSalon,
+        ),
         AlarmEvent(kind: AlarmEventKind.armed, at: now.subtract(const Duration(days: 1))),
       ]),
     )..start();
@@ -108,7 +114,7 @@ void main() {
       await pumpApp(tester);
       final connection = connections.single.$2;
       connection.goLive(AlarmState.armed);
-      connection.publishMotion(1500, at: DateTime.now());
+      connection.publishDetection(1500, at: DateTime.now());
       connection.publishState(AlarmState.triggered);
       await tester.pump(const Duration(milliseconds: 500));
 

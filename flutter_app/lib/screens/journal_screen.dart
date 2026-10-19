@@ -10,7 +10,7 @@ import '../widgets/journal_widgets.dart';
 enum JournalFilter {
   all('Tout', null),
   intrusions('Intrusions', {AlarmEventKind.triggered}),
-  motions('Détections', {AlarmEventKind.motion}),
+  detections('Détections', {AlarmEventKind.detection}),
   arming('Activations', {
     AlarmEventKind.armed,
     AlarmEventKind.armedNight,

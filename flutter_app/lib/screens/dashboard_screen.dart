@@ -154,7 +154,7 @@ class DashboardScreen extends StatelessWidget {
               ),
           ]),
           const SizedBox(height: 16),
-          SirenStatusCard(active: controller.isSirenActive),
+          SirenStatusCard(active: controller.isTriggered),
         ],
       );
 

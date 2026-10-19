@@ -38,8 +38,8 @@ smartalarm/
 │   ├── architecture.md   # architecture, machine à états, choix techniques, GPIO
 │   ├── mqtt-topics.md    # contrat MQTT (topics, payloads, QoS, retained)
 │   └── setup.md          # installation et configuration
-├── esp32/                # sketch Wokwi (étapes 3, 4 et 6 ter)
-└── flutter_app/          # application Flutter (étapes 5, 6, 6 bis et 6 ter)
+├── esp32/                # firmware ESP32 et circuit Wokwi
+└── flutter_app/          # application Flutter (iOS, Android, Web)
 ```
 
 ## Documentation

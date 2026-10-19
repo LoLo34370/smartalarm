@@ -15,7 +15,7 @@ class FakeAlarmConnection implements AlarmConnection {
   final ValueNotifier<String?> lastError = ValueNotifier(null);
 
   final _states = StreamController<AlarmState>.broadcast(sync: true);
-  final _motions = StreamController<MotionEvent>.broadcast(sync: true);
+  final _detections = StreamController<Detection>.broadcast(sync: true);
   final _availability = StreamController<DeviceAvailability>.broadcast(
     sync: true,
   );
@@ -30,7 +30,7 @@ class FakeAlarmConnection implements AlarmConnection {
   @override
   Stream<AlarmState> get alarmStates => _states.stream;
   @override
-  Stream<MotionEvent> get motions => _motions.stream;
+  Stream<Detection> get detections => _detections.stream;
   @override
   Stream<DeviceAvailability> get availability => _availability.stream;
   @override
@@ -49,7 +49,7 @@ class FakeAlarmConnection implements AlarmConnection {
   @override
   void dispose() {
     _states.close();
-    _motions.close();
+    _detections.close();
     _availability.close();
     _sensorStates.close();
   }
@@ -60,12 +60,12 @@ class FakeAlarmConnection implements AlarmConnection {
   void publishState(AlarmState state) => _states.add(state);
   void publishAvailability(DeviceAvailability value) =>
       _availability.add(value);
-  void publishMotion(
+  void publishDetection(
     int uptimeMs, {
     DateTime? at,
     Sensor sensor = Sensor.pirSalon,
-  }) => _motions.add(
-    MotionEvent(
+  }) => _detections.add(
+    Detection(
       uptimeMs: uptimeMs,
       receivedAt: at ?? DateTime(2026, 10, 19, 10),
       sensor: sensor,

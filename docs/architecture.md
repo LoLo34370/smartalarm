@@ -6,10 +6,10 @@
 ┌──────────────────────────┐          ┌──────────────────────┐          ┌────────────────────────────┐
 │  ESP32 (simulé Wokwi)    │  MQTTS   │    HiveMQ Cloud      │   WSS    │   Application Flutter      │
 │                          │  :8883   │    (Serverless)      │  :8884   │   (Web, iOS, Android)      │
-│  PIR  → GPIO 13 (in)     │◀────────▶│                      │◀────────▶│                            │
+│  PIR  → GPIO 13 (in)     │◀────────▶│                      │◀────────▶│  MqttService (WSS / TLS)   │
 │  Porte → GPIO 14 (in)    │          │                      │          │                            │
 │  Fenêtre → GPIO 32 (in)  │          │                      │          │                            │
-│  LED verte → GPIO 26     │   TLS    │  broker MQTT 3.1.1   │   TLS    │  MqttService (WSS)         │
+│  LED verte → GPIO 26     │   TLS    │  broker MQTT 3.1.1   │   TLS    │                            │
 │  LED rouge → GPIO 27     │          │  auth user/password  │          │  AlarmController           │
 │  Buzzer → GPIO 25        │          │  retained + LWT      │          │  DashboardScreen           │
 │                          │          │                      │          │                            │
@@ -104,7 +104,7 @@ d'avertissement et ne simule jamais l'état.
   (retained, QoS 1) sur `availability`. Si la liaison est coupée sans
   déconnexion propre, le broker le publie à sa place.
 - **Flutter** : à la (re)connexion, Flutter se réabonne. Le broker lui renvoie
-  aussitôt les derniers messages *retained* de `state` et `availability`.
+  aussitôt les derniers messages *retained* de `state`, `sensors` et `availability`.
   L'interface est donc resynchronisée sans aucune requête supplémentaire.
 - Si `availability = offline`, Flutter grise les commandes et signale que le
   dernier état affiché n'est peut-être plus à jour.

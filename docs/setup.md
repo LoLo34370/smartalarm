@@ -1,8 +1,6 @@
 # Installation et configuration — SmartAlarm
 
-> Ce guide est complété au fil des étapes du projet.
-
-## Prérequis vérifiés (étape 1)
+## Prérequis
 
 | Outil | Version constatée | Rôle |
 |-------|-------------------|------|
@@ -10,8 +8,9 @@
 | Dart | 3.7.2 | Langage Flutter |
 | Google Chrome | installé | Cible Flutter Web |
 | Git | 2.42 | Versionnement |
-| Android toolchain | SDK 36.1 présent, Android Studio non installé | Optionnel (adaptation Android ultérieure) |
-| arduino-cli | **non installé** | Inutile : Wokwi compile le sketch en ligne |
+| Xcode + CocoaPods | installés | Version iOS |
+| Android toolchain | SDK 36.1 | Version Android |
+| PlatformIO | extension VS Code | Compilation locale du firmware (option recommandée) |
 
 Comptes nécessaires :
 - Un compte [Wokwi](https://wokwi.com) (gratuit) pour sauvegarder le projet de simulation.
@@ -46,7 +45,7 @@ filtre de topics. Le champ **Permission** n'offre que *Subscribe Only*,
 *Publish Only* ou *Publish and Subscribe*, et ces choix s'appliquent à
 **tous** les topics (`#`). On choisit donc **Publish and Subscribe** : chaque
 client doit pouvoir publier et s'abonner. C'est une limite connue du
-prototype, à mentionner dans le README final.
+prototype.
 
 ### 3. Créer deux identifiants MQTT (un par client)
 
@@ -55,7 +54,7 @@ Onglet **Access Management**, section **Authentication**, zone **Credentials** :
 | Username | Utilisé par | Permission |
 |----------|-------------|------------|
 | `smartalarm-esp32` | ESP32 / Wokwi | *Publish and Subscribe* |
-| `smartalarm-flutter` | Flutter Web | *Publish and Subscribe* |
+| `smartalarm-flutter` | Application Flutter | *Publish and Subscribe* |
 
 Saisir le username (lettres, chiffres, `-`, `+`, `.`, `_` uniquement), un mot
 de passe fort et sa confirmation, choisir la permission, puis cliquer sur
@@ -132,7 +131,7 @@ Résultat constaté le 19/10/2026 sur le cluster du projet (ports 8883 et 8884) 
 | Contact porte (interrupteur de gauche) | 2 (commun) / 1 | **D14** / GND |
 | Contact fenêtre (interrupteur de droite) | 2 (commun) / 1 | **D32** / GND |
 
-### Tester la logique locale (étape 3, sans MQTT)
+### Tester la logique locale (sans MQTT)
 
 1. Cliquer sur ▶ (**Start the simulation**). Le moniteur série s'ouvre en bas.
 2. Au démarrage, attendu : `[STATE ] DISARMED`. Toutes les LEDs sont éteintes et le buzzer est muet.
@@ -187,9 +186,9 @@ Prérequis : extensions VS Code **PlatformIO IDE** et **Wokwi Simulator**.
 | `wokwi.toml` | Indique au simulateur le firmware compilé (`.pio/build/esp32dev/firmware.bin` et `.elf`) |
 | `diagram.json` | Le circuit (identique à celui de wokwi.com) |
 
-### Connexion MQTT (étape 4)
+### Connexion MQTT
 
-1. Remplacer **sketch.ino** par la nouvelle version de `esp32/sketch.ino`.
+1. Vérifier que **sketch.ino** est à jour avec `esp32/sketch.ino`.
 2. Menu **▾** → **New file…** → `config.h` : coller le contenu de votre
    `esp32/config.h` **local** (hôte, identifiants ESP32 et certificats racines).
 3. Lancer la simulation. Logs attendus, dans l'ordre :
@@ -202,6 +201,7 @@ Prérequis : extensions VS Code **PlatformIO IDE** et **Wokwi Simulator**.
    [MQTT  ] smartalarm/demo01/availability -> online
    [MQTT  ] abonnement smartalarm/demo01/command (QoS 1) OK
    [STATE ] DISARMED -> smartalarm/demo01/state (publié)
+   [SENSOR] {"pir_salon":"IDLE","door":"CLOSED","window":"CLOSED"} (publié)
    ```
 
 > ⚠️ **Visibilité Wokwi** : avec un compte gratuit, un projet Wokwi
@@ -227,9 +227,10 @@ Abonné à `smartalarm/demo01/#` :
 
 | Action | Attendu dans le Web Client |
 |--------|----------------------------|
-| Démarrer la simulation | `availability` = `online`, `state` = `{"state":"DISARMED"}` |
+| Démarrer la simulation | `availability` = `online`, `state` = `{"state":"DISARMED"}`, `sensors` = état des trois capteurs |
 | Publier `{"command":"ARM"}` sur `…/command` (retain décoché) | `state` = `{"state":"ARMED"}`, LED verte allumée |
-| PIR → **Simulate Motion** | `motion` = `{"event":"MOTION_DETECTED","uptimeMs":…}`, puis `state` = `TRIGGERED` |
+| PIR → **Simulate Motion** | `motion` = `{"event":"MOTION_DETECTED","sensor":"pir_salon","uptimeMs":…}`, puis `state` = `TRIGGERED` |
+| Publier `{"command":"ARM_NIGHT"}`, puis basculer la porte | `state` = `ARMED_NIGHT`, puis `motion` = `{"event":"OPENING_DETECTED","sensor":"door",…}` et `state` = `TRIGGERED` |
 | Publier `{"command":"DISARM"}` | `state` = `{"state":"DISARMED"}`, sirène coupée |
 | Publier `hello` sur `…/command` | Rien ne change. L'ESP32 affiche `payload invalide ignoré` |
 | **Arrêter** la simulation (■) | Après environ 20 s (keep-alive × 1,5), `availability` = `offline` (Last Will) |
@@ -283,7 +284,7 @@ flutter run -d ios --dart-define-from-file=config/dart_defines.json
 | Protocole | MQTT 3.1.1 (`setProtocolV311()`), keep-alive 20 s (désactivé par défaut dans `mqtt_client`) |
 | Client ID | `smartalarm-flutter-<aléatoire>` : unique par onglet et distinct de l'ESP32 |
 | Reconnexion | Tentatives initiales gérées par le service (2 s, 4 s, 8 s… jusqu'à 30 s), puis `autoReconnect` de la bibliothèque, avec réabonnement automatique |
-| Resynchronisation | À chaque (ré)abonnement, le broker renvoie les messages retained `state` et `availability` |
+| Resynchronisation | À chaque (ré)abonnement, le broker renvoie les messages retained `state`, `sensors` et `availability` |
 | Commandes | QoS 1, jamais retained. L'état affiché ne change qu'à la réception du `state` publié par l'ESP32. |
 | Journal | `shared_preferences` : 200 dernières entrées, horodatées à la réception. Seules les vraies transitions sont journalisées (pas l'état retained reçu à chaque connexion). |
 | Réglages | Broker saisi dans l'app prioritaire sur `--dart-define`, stocké avec `flutter_secure_storage` (Trousseau iOS, Keystore Android). Un changement relance une connexion neuve. |
@@ -296,8 +297,9 @@ lib/
 ├── main.dart                       # charge les réglages, crée MqttService + AlarmController,
 │                                   # recrée la connexion si le broker change
 ├── config/   mqtt_config.dart      # paramètres --dart-define
-│             app_theme.dart        # Material 3, couleurs vert / rouge / gris
-├── models/   alarm_models.dart     # AlarmState, AlarmCommand, DeviceAvailability, MotionEvent
+│             app_theme.dart        # Material 3, couleurs vert / bleu / rouge / gris
+├── models/   alarm_models.dart     # AlarmState, AlarmCommand, DeviceAvailability, Detection
+│             sensor.dart           # capteurs, zones, état publié sur <base>/sensors
 │             alarm_event.dart      # entrée du journal d'activité
 │             mqtt_topics.dart
 ├── services/ alarm_connection.dart # interface (remplacée par un faux dans les tests)
@@ -311,7 +313,7 @@ lib/
 ├── screens/  dashboard_screen.dart # mise en page responsive (1 ou 2 colonnes)
 │             journal_screen.dart   # journal complet, filtres, regroupé par jour
 │             settings_screen.dart  # broker MQTT, sécurité, données
-└── widgets/                        # en-tête, bandeaux, carte d'état, bouton, PIR, sirène, journal
+└── widgets/                        # en-tête, bandeaux, carte d'état, boutons, capteurs, sirène, journal
 ```
 
 Règles du dashboard :
@@ -320,6 +322,8 @@ Règles du dashboard :
   avertissement si rien n'arrive sous 10 s.
 - Commandes désactivées si le broker est déconnecté ou si l'ESP32 est `offline`.
   L'état reste affiché avec le badge « Dernier état connu ».
+- Désarmé, deux boutons : « Activer l'alarme » (tous les capteurs) et « Mode nuit »
+  (porte et fenêtre). Un avertissement s'affiche si une porte ou une fenêtre est ouverte.
 - Journal : la carte « Activité récente » montre les 6 dernières entrées,
   « Tout voir » ouvre le journal complet.
 - Désactivation protégée (si activée dans les réglages) : le bouton affiche
@@ -329,7 +333,7 @@ Règles du dashboard :
 
 ```bash
 flutter analyze                         # analyse statique
-flutter test --exclude-tags live        # tests unitaires et widgets (37 tests)
+flutter test --exclude-tags live        # tests unitaires et widgets (45 tests)
 flutter build ios --simulator --debug   # vérifie la compilation iOS
 # Test réel dans Chrome (client WSS) — ESP32 simulé démarré :
 flutter test --platform chrome --tags live \

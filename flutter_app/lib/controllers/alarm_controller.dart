@@ -94,13 +94,9 @@ class AlarmController extends ChangeNotifier {
   /// Journal d'activité, l'entrée la plus récente en premier.
   List<AlarmEvent> get journal => List.unmodifiable(_journal);
 
-  /// Dernière détection connue, tous capteurs confondus.
-  AlarmEvent? get lastMotion =>
-      _journal.where((e) => e.kind == AlarmEventKind.motion).firstOrNull;
-
   /// Dernière détection connue de ce capteur.
   AlarmEvent? lastDetection(Sensor sensor) => _journal
-      .where((e) => e.kind == AlarmEventKind.motion && (e.sensor ?? Sensor.pirSalon) == sensor)
+      .where((e) => e.kind == AlarmEventKind.detection && e.sensor == sensor)
       .firstOrNull;
 
   /// Capteur actif (mouvement, ouverture), `null` tant que l'ESP32 ne l'a pas publié.
@@ -142,7 +138,6 @@ class AlarmController extends ChangeNotifier {
   bool get isLive => isBrokerConnected && isDeviceOnline;
 
   bool get isTriggered => _alarmState == AlarmState.triggered;
-  bool get isSirenActive => isTriggered;
 
   /// Désarmé (ou inconnu) → proposer ARM (ou ARM_NIGHT) ;
   /// armé ou déclenché → proposer DISARM.
@@ -165,7 +160,7 @@ class AlarmController extends ChangeNotifier {
     _subscriptions.addAll([
       _connection.alarmStates.listen(_onAlarmState),
       _connection.availability.listen(_onAvailability),
-      _connection.motions.listen(_onMotion),
+      _connection.detections.listen(_onDetection),
       _connection.sensorStates.listen(_onSensorStates),
     ]);
     _connection.connect();
@@ -211,10 +206,10 @@ class AlarmController extends ChangeNotifier {
         return;
       }
     }
-    sendCommand(command);
+    _send(command);
   }
 
-  void sendCommand(AlarmCommand command) {
+  void _send(AlarmCommand command) {
     if (!canSendCommand) return;
     if (!_connection.sendCommand(command)) {
       _commandWarning = 'La commande ${_label(command)} n\'a pas pu être envoyée.';
@@ -266,10 +261,10 @@ class AlarmController extends ChangeNotifier {
     _notify();
   }
 
-  void _onMotion(MotionEvent event) {
+  void _onDetection(Detection event) {
     // L'ESP32 publie la détection juste avant de passer en TRIGGERED.
     if (_alarmState?.isArmed ?? false) _intrusionSensor = event.sensor;
-    _record(AlarmEvent.fromMotion(event));
+    _record(AlarmEvent.fromDetection(event));
     _notify();
   }
 

@@ -43,7 +43,7 @@ void main() {
       expect(find.text('MQTT connecté'), findsOneWidget);
       expect(find.text('ESP32 en ligne'), findsOneWidget);
 
-      connection.publishMotion(42000);
+      connection.publishDetection(42000);
       connection.publishState(AlarmState.triggered);
       await tester.pump(const Duration(milliseconds: 500));
 
@@ -91,7 +91,7 @@ void main() {
     expect(find.text('Ignoré la nuit'), findsOneWidget);
     expect(find.text('Surveillé'), findsNWidgets(2));
 
-    connection.publishMotion(8000, sensor: Sensor.window);
+    connection.publishDetection(8000, sensor: Sensor.window);
     connection.publishState(AlarmState.triggered);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.textContaining('Ouverture : Fenêtre.'), findsOneWidget);

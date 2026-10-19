@@ -45,13 +45,15 @@ class AlarmControlButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isPending = pendingCommand != null || isAuthenticating;
-    final (label, icon, color) = switch (nextCommand) {
-      AlarmCommand.arm => ('Activer l\'alarme', Icons.lock_rounded, AppColors.protected),
-      AlarmCommand.armNight => ('Mode nuit', Icons.bedtime_rounded, AppColors.night),
+    final (label, icon, baseColor) = switch (nextCommand) {
+      AlarmCommand.arm || AlarmCommand.armNight =>
+        ('Activer l\'alarme', Icons.lock_rounded, AppColors.protected),
       AlarmCommand.disarm when isTriggered =>
         ('Arrêter la sirène et désactiver', Icons.notifications_off_rounded, AppColors.alert),
       AlarmCommand.disarm => ('Désactiver l\'alarme', Icons.lock_open_rounded, AppColors.textPrimary),
     };
+    // Pendant l'attente du mode nuit, le bouton prend la couleur du mode nuit.
+    final color = pendingCommand == AlarmCommand.armNight ? AppColors.night : baseColor;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -59,12 +61,9 @@ class AlarmControlButton extends StatelessWidget {
         FilledButton.icon(
           onPressed: enabled && !isPending ? onPressed : null,
           style: FilledButton.styleFrom(
-            backgroundColor: pendingCommand == AlarmCommand.armNight ? AppColors.night : color,
+            backgroundColor: color,
             // Pendant l'attente, le bouton garde sa couleur (atténuée) au lieu du gris.
-            disabledBackgroundColor: isPending
-                ? (pendingCommand == AlarmCommand.armNight ? AppColors.night : color)
-                    .withValues(alpha: 0.75)
-                : null,
+            disabledBackgroundColor: isPending ? color.withValues(alpha: 0.75) : null,
             disabledForegroundColor: isPending ? Colors.white : null,
           ),
           icon: isPending

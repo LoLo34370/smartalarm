@@ -10,7 +10,7 @@ class DashboardHeader extends StatelessWidget {
     super.key,
     required this.brokerStatus,
     required this.availability,
-    this.deviceId = 'demo01',
+    required this.deviceId,
     this.onOpenSettings,
   });
 

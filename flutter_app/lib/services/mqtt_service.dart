@@ -49,14 +49,14 @@ class MqttService implements AlarmConnection {
   final ValueNotifier<String?> lastError = ValueNotifier(null);
 
   final _alarmStates = StreamController<AlarmState>.broadcast();
-  final _motions = StreamController<MotionEvent>.broadcast();
+  final _detections = StreamController<Detection>.broadcast();
   final _availability = StreamController<DeviceAvailability>.broadcast();
   final _sensorStates = StreamController<Map<Sensor, bool>>.broadcast();
 
   @override
   Stream<AlarmState> get alarmStates => _alarmStates.stream;
   @override
-  Stream<MotionEvent> get motions => _motions.stream;
+  Stream<Detection> get detections => _detections.stream;
   @override
   Stream<DeviceAvailability> get availability => _availability.stream;
   @override
@@ -118,7 +118,7 @@ class MqttService implements AlarmConnection {
     disconnect();
     _disposed = true;
     _alarmStates.close();
-    _motions.close();
+    _detections.close();
     _availability.close();
     _sensorStates.close();
     status.dispose();
@@ -222,8 +222,8 @@ class MqttService implements AlarmConnection {
       final state = AlarmState.tryParse(payload);
       if (state != null) _alarmStates.add(state);
     } else if (topic == _topics.motion) {
-      final event = MotionEvent.tryParse(payload);
-      if (event != null) _motions.add(event);
+      final event = Detection.tryParse(payload);
+      if (event != null) _detections.add(event);
     } else if (topic == _topics.availability) {
       _availability.add(DeviceAvailability.parse(payload));
     } else if (topic == _topics.sensors) {

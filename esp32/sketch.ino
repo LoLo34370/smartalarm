@@ -1,7 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// SmartAlarm — ESP32 (Wokwi)
-// Étape 4 : Wi-Fi + MQTT sécurisé (TLS) vers HiveMQ Cloud.
-// Étape 6 ter : plusieurs capteurs et mode nuit.
+// SmartAlarm — ESP32 (Wokwi), relié à HiveMQ Cloud en MQTT sur TLS.
 //
 // L'ESP32 est la SOURCE DE VÉRITÉ de l'état de l'alarme :
 //   - il reçoit les commandes ARM / ARM_NIGHT / DISARM sur  <base>/command
@@ -84,13 +82,13 @@ Sensor sensors[] = {
   {"window",    PIN_WINDOW, SensorZone::PERIMETER, true,  LOW},
 };
 
-bool     redLedOn       = false;
-bool     greenLedOn     = false;
-bool     sirenHighTone  = false;
-bool     sirenActive    = false;
-uint32_t lastBlinkMs    = 0;
+bool     redLedOn         = false;
+bool     greenLedOn       = false;
+bool     sirenHighTone    = false;
+bool     sirenActive      = false;
+uint32_t lastBlinkMs      = 0;
 uint32_t lastNightBlinkMs = 0;
-uint32_t lastSirenMs    = 0;
+uint32_t lastSirenMs      = 0;
 String   serialBuffer;
 
 const char *stateName(AlarmState state) {

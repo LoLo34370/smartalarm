@@ -1,0 +1,4 @@
+tags:
+  live:
+    # Tests contre le vrai broker : lancés uniquement avec --tags live
+    skip: false

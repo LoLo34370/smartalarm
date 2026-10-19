@@ -44,8 +44,8 @@ smartalarm/
 | 1 | Initialisation et architecture | ✅ |
 | 2 | Configuration HiveMQ Cloud | ✅ |
 | 3 | Circuit Wokwi (logique locale) | ✅ |
-| 4 | ESP32 et MQTT | 🔄 en attente du test Wokwi + HiveMQ |
-| 5 | Initialisation Flutter et service MQTT | ⏳ |
+| 4 | ESP32 et MQTT | ✅ |
+| 5 | Initialisation Flutter et service MQTT | ✅ |
 | 6 | Dashboard Flutter | ⏳ |
 | 7 | Tests finaux et documentation | ⏳ |
 

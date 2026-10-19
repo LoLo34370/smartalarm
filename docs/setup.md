@@ -201,7 +201,7 @@ Prérequis : extensions VS Code **PlatformIO IDE** et **Wokwi Simulator**.
 | Log | Cause probable |
 |-----|----------------|
 | `rc=4 : identifiants incorrects` | Username ou mot de passe dans `config.h` |
-| `rc=5 : non autorisé` | Permission de l'identifiant dans HiveMQ |
+| `rc=5 : non autorisé` | HiveMQ Cloud renvoie ce code pour un **mot de passe ou username incorrect**. Vérifier `config.h`, puis **recompiler** (les identifiants sont intégrés au firmware). |
 | `rc=-2 : échec TCP/TLS` + ligne `[TLS   ]` | Hôte mal recopié, port incorrect ou certificat racine. Le message mbedTLS précise la cause. |
 | `rc=-4 : délai dépassé` | Broker injoignable ou réseau Wokwi lent : nouvel essai automatique |
 | Boucle Wi-Fi | SSID ou canal modifiés dans `config.h` (`Wokwi-GUEST`, `""`, canal 6) |
@@ -222,7 +222,45 @@ Abonné à `smartalarm/demo01/#` :
 
 ## Application Flutter
 
-*À compléter à l'étape 5.*
+### Lancement (Chrome)
+
+```bash
+cd flutter_app
+cp config/dart_defines.example.json config/dart_defines.json   # une seule fois, puis remplir
+flutter pub get
+flutter run -d chrome --dart-define-from-file=config/dart_defines.json
+```
+
+Sans `--dart-define-from-file`, l'application affiche « Configuration MQTT
+incomplète » au lieu de se connecter.
+
+### Choix techniques
+
+| Élément | Choix |
+|---------|-------|
+| Package | `mqtt_client` **10.8.0** : dernière version compatible avec Dart 3.7 (Flutter 3.29). Les versions ≥ 10.8.1 exigent Dart 3.8. |
+| Web | `MqttBrowserClient` en **WSS** sur `wss://<host>:8884/mqtt`. Le navigateur valide lui-même le certificat. |
+| Android | `MqttServerClient` en **TLS** sur le port 8883 (`secure = true`, magasin de certificats du système) |
+| Choix de la plateforme | Import conditionnel (`services/mqtt_client_factory.dart`) : le code `dart:io` n'est jamais compilé pour le web |
+| Protocole | MQTT 3.1.1 (`setProtocolV311()`), keep-alive 20 s (désactivé par défaut dans `mqtt_client`) |
+| Client ID | `smartalarm-flutter-<aléatoire>` : unique par onglet et distinct de l'ESP32 |
+| Reconnexion | Tentatives initiales gérées par le service (2 s, 4 s, 8 s… jusqu'à 30 s), puis `autoReconnect` de la bibliothèque, avec réabonnement automatique |
+| Resynchronisation | À chaque (ré)abonnement, le broker renvoie les messages retained `state` et `availability` |
+| Commandes | QoS 1, jamais retained. L'état affiché ne change qu'à la réception du `state` publié par l'ESP32. |
+
+### Vérifications
+
+```bash
+flutter analyze                         # analyse statique
+flutter test --exclude-tags live        # tests unitaires (décodage des messages)
+# Test réel dans Chrome (client WSS) — ESP32 simulé démarré :
+flutter test --platform chrome --tags live \
+  --dart-define-from-file=config/dart_defines.json test/mqtt_live_test.dart
+```
+
+> Sur macOS récent, le premier lancement d'un outil Flutter (`impellerc`)
+> peut être tué pendant que macOS vérifie le binaire (`ShaderCompilerException`).
+> Il suffit de relancer la commande.
 
 ## Gestion des secrets
 

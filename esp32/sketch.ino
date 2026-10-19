@@ -57,6 +57,7 @@ AlarmState alarmState = AlarmState::DISARMED;
 bool     lastPirLevel   = LOW;   // pour détecter le front montant LOW → HIGH
 bool     redLedOn       = false;
 bool     sirenHighTone  = false;
+bool     sirenActive    = false;
 uint32_t lastBlinkMs    = 0;
 uint32_t lastSirenMs    = 0;
 String   serialBuffer;
@@ -79,10 +80,10 @@ void publishState() {
 
   if (mqtt.connected()) {
     const bool ok = mqtt.publish(TOPIC_STATE.c_str(), payload, true);  // retained
-    Serial.printf("[STATE ] %s -> %s %s\n", stateName(alarmState), TOPIC_STATE.c_str(),
+    Serial.printf("[STATE ] %s -> %s %s\r\n", stateName(alarmState), TOPIC_STATE.c_str(),
                   ok ? "(publié)" : "(ÉCHEC publication)");
   } else {
-    Serial.printf("[STATE ] %s (MQTT hors ligne : publié à la reconnexion)\n",
+    Serial.printf("[STATE ] %s (MQTT hors ligne : publié à la reconnexion)\r\n",
                   stateName(alarmState));
   }
 }
@@ -94,16 +95,25 @@ void publishMotion(uint32_t uptimeMs) {
 
   if (mqtt.connected()) {
     const bool ok = mqtt.publish(TOPIC_MOTION.c_str(), payload, false);  // jamais retained
-    Serial.printf("[MOTION] %s %s\n", payload, ok ? "(publié)" : "(ÉCHEC publication)");
+    Serial.printf("[MOTION] %s %s\r\n", payload, ok ? "(publié)" : "(ÉCHEC publication)");
   } else {
-    Serial.printf("[MOTION] %s (MQTT hors ligne : événement non transmis)\n", payload);
+    Serial.printf("[MOTION] %s (MQTT hors ligne : événement non transmis)\r\n", payload);
   }
 }
 
 // ── Sorties physiques ───────────────────────────────────────────────────────
 
+void sirenOn(uint16_t frequency) {
+  tone(PIN_BUZZER, frequency);
+  sirenActive = true;
+}
+
 void sirenOff() {
-  noTone(PIN_BUZZER);
+  // noTone() sans tone() préalable provoque « LEDC is not initialized ».
+  if (sirenActive) {
+    noTone(PIN_BUZZER);
+    sirenActive = false;
+  }
   digitalWrite(PIN_BUZZER, LOW);
 }
 
@@ -131,7 +141,7 @@ void applyOutputs() {
       lastBlinkMs   = now;
       lastSirenMs   = now;
       digitalWrite(PIN_LED_RED, HIGH);
-      tone(PIN_BUZZER, SIREN_FREQ_LOW);
+      sirenOn(SIREN_FREQ_LOW);
       break;
     }
   }
@@ -142,7 +152,7 @@ void setState(AlarmState newState) {
     publishState();  // commande sans effet : on reconfirme l'état courant
     return;
   }
-  Serial.printf("[ALARM ] %s -> %s\n", stateName(alarmState), stateName(newState));
+  Serial.printf("[ALARM ] %s -> %s\r\n", stateName(alarmState), stateName(newState));
   alarmState = newState;
   applyOutputs();
   publishState();
@@ -159,7 +169,7 @@ void handleCommand(String command) {
   } else if (command == "DISARM") {
     setState(AlarmState::DISARMED);
   } else {
-    Serial.printf("[CMD   ] commande inconnue ignorée : \"%s\"\n", command.c_str());
+    Serial.printf("[CMD   ] commande inconnue ignorée : \"%s\"\r\n", command.c_str());
   }
 }
 
@@ -185,7 +195,7 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
   for (unsigned int i = 0; i < length; i++) {
     message += static_cast<char>(payload[i]);
   }
-  Serial.printf("[MQTT  ] reçu sur %s : %s\n", topic, message.c_str());
+  Serial.printf("[MQTT  ] reçu sur %s : %s\r\n", topic, message.c_str());
 
   if (TOPIC_COMMAND != topic) {
     return;
@@ -206,7 +216,7 @@ void readSerialCommand() {
     const char c = static_cast<char>(Serial.read());
     if (c == '\n' || c == '\r') {
       if (serialBuffer.length() > 0) {
-        Serial.printf("[CMD   ] reçu (série) : %s\n", serialBuffer.c_str());
+        Serial.printf("[CMD   ] reçu (série) : %s\r\n", serialBuffer.c_str());
         handleCommand(serialBuffer);
         serialBuffer = "";
       }
@@ -223,7 +233,7 @@ void handlePir() {
     return;
   }
   lastPirLevel = level;
-  Serial.printf("[PIR   ] signal %s\n", level == HIGH ? "HIGH" : "LOW");
+  Serial.printf("[PIR   ] signal %s\r\n", level == HIGH ? "HIGH" : "LOW");
 
   if (level != HIGH) {
     return;  // retour à LOW : TRIGGERED reste actif
@@ -259,7 +269,7 @@ void updateAlarmOutputs() {
   if (now - lastSirenMs >= SIREN_STEP_MS) {
     lastSirenMs = now;
     sirenHighTone = !sirenHighTone;
-    tone(PIN_BUZZER, sirenHighTone ? SIREN_FREQ_HIGH : SIREN_FREQ_LOW);
+    sirenOn(sirenHighTone ? SIREN_FREQ_HIGH : SIREN_FREQ_LOW);
   }
 }
 
@@ -281,14 +291,14 @@ const char *mqttStateLabel(int state) {
 }
 
 void startWifi() {
-  Serial.printf("[WIFI  ] connexion à \"%s\" (canal %d)...\n", WIFI_SSID, WIFI_CHANNEL);
+  Serial.printf("[WIFI  ] connexion à \"%s\" (canal %d)...\r\n", WIFI_SSID, WIFI_CHANNEL);
   WiFi.disconnect();
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD, WIFI_CHANNEL);
   lastWifiAttemptMs = millis();
 }
 
 bool connectMqtt() {
-  Serial.printf("[MQTT  ] connexion TLS à %s:%d (client %s)...\n",
+  Serial.printf("[MQTT  ] connexion TLS à %s:%d (client %s)...\r\n",
                 MQTT_HOST, MQTT_PORT, MQTT_CLIENT_ID);
 
   // Last Will : si l'ESP32 disparaît sans prévenir, le broker publie
@@ -298,21 +308,23 @@ bool connectMqtt() {
                                true /* cleanSession */);
   if (!ok) {
     const int rc = mqtt.state();
-    Serial.printf("[MQTT  ] échec (rc=%d : %s), nouvel essai dans %lus\n",
+    Serial.printf("[MQTT  ] échec (rc=%d : %s), nouvel essai dans %lus\r\n",
                   rc, mqttStateLabel(rc), (unsigned long)(MQTT_RETRY_MS / 1000));
+    // L'erreur TLS n'a de sens que si la connexion sécurisée elle-même a échoué
+    // (sinon lastError() renvoie une ancienne erreur interne sans rapport).
     char tlsError[128];
-    if (tlsClient.lastError(tlsError, sizeof(tlsError)) != 0) {
-      Serial.printf("[TLS   ] %s\n", tlsError);
+    if (rc == MQTT_CONNECT_FAILED && tlsClient.lastError(tlsError, sizeof(tlsError)) != 0) {
+      Serial.printf("[TLS   ] %s\r\n", tlsError);
     }
     return false;
   }
 
   Serial.println("[MQTT  ] connecté (TLS + authentification OK)");
   mqtt.publish(TOPIC_AVAILABILITY.c_str(), "online", true);  // retained
-  Serial.printf("[MQTT  ] %s -> online\n", TOPIC_AVAILABILITY.c_str());
+  Serial.printf("[MQTT  ] %s -> online\r\n", TOPIC_AVAILABILITY.c_str());
 
   const bool subscribed = mqtt.subscribe(TOPIC_COMMAND.c_str(), 1);
-  Serial.printf("[MQTT  ] abonnement %s (QoS 1) %s\n", TOPIC_COMMAND.c_str(),
+  Serial.printf("[MQTT  ] abonnement %s (QoS 1) %s\r\n", TOPIC_COMMAND.c_str(),
                 subscribed ? "OK" : "ÉCHEC");
 
   publishState();  // resynchronise les clients sur l'état réel
@@ -336,7 +348,7 @@ void maintainConnections() {
 
   if (!wifiConnected) {
     wifiConnected = true;
-    Serial.printf("[WIFI  ] connecté, IP %s\n", WiFi.localIP().toString().c_str());
+    Serial.printf("[WIFI  ] connecté, IP %s\r\n", WiFi.localIP().toString().c_str());
     lastMqttAttemptMs = now - MQTT_RETRY_MS;  // tentative MQTT immédiate
   }
 
@@ -346,7 +358,7 @@ void maintainConnections() {
   }
 
   if (mqttConnected) {
-    Serial.printf("[MQTT  ] connexion perdue (rc=%d : %s)\n", mqtt.state(),
+    Serial.printf("[MQTT  ] connexion perdue (rc=%d : %s)\r\n", mqtt.state(),
                   mqttStateLabel(mqtt.state()));
     mqttConnected = false;
   }

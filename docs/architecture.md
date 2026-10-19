@@ -5,7 +5,7 @@
 ```text
 ┌──────────────────────────┐          ┌──────────────────────┐          ┌────────────────────────────┐
 │  ESP32 (simulé Wokwi)    │  MQTTS   │    HiveMQ Cloud      │   WSS    │   Application Flutter      │
-│                          │  :8883   │    (Serverless)      │  :8884   │   (Web / Chrome)           │
+│                          │  :8883   │    (Serverless)      │  :8884   │   (Web, iOS, Android)      │
 │  PIR  → GPIO 13 (in)     │◀────────▶│                      │◀────────▶│                            │
 │  LED verte → GPIO 26     │   TLS    │  broker MQTT 3.1.1   │   TLS    │  MqttService (WSS)         │
 │  LED rouge → GPIO 27     │          │  auth user/password  │          │  AlarmController           │
@@ -94,7 +94,10 @@ d'avertissement et ne simule jamais l'état.
 | WSS pour Flutter Web | Un navigateur ne peut pas ouvrir de socket TCP brute. MQTT passe donc par une WebSocket sécurisée. |
 | TLS avec CA racine | Le certificat du broker est vérifié avec le certificat racine (CA) embarqué dans l'ESP32. Pas de `setInsecure()`. |
 | ESP32 = source de vérité | Évite les incohérences : l'UI reflète toujours l'état physique réel. |
-| `ValueNotifier` / `ChangeNotifier` | Suffisant pour un seul écran, sans dépendance externe de gestion d'état. |
+| `ValueNotifier` / `ChangeNotifier` | Suffisant pour trois écrans (dashboard, journal, réglages), sans dépendance externe de gestion d'état. |
+| Journal stocké sur l'appareil | Pas de backend : chaque téléphone garde son propre historique. Les entrées sont horodatées à la réception, car l'ESP32 n'a pas d'horloge réelle. |
+| Réglages dans l'application | Permet de changer de broker sans recompiler (fin de l'offre HiveMQ Serverless au 31/12/2026). Les identifiants restent hors du code compilé. |
+| Face ID pour désactiver | Désactiver est l'action sensible : un téléphone déverrouillé laissé sur une table ne doit pas suffire. Armer reste immédiat. |
 
 ## Vérification des GPIO (ESP32 DevKit V1)
 

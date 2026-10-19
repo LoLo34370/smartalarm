@@ -1,11 +1,13 @@
 # SmartAlarm 🏠🔔
 
 Alarme domestique connectée : un **ESP32** simulé sur **Wokwi** surveille un
-capteur de mouvement PIR. Une application **Flutter** permet de l'activer et
-de la désactiver à distance via le broker **HiveMQ Cloud** (MQTT sur TLS).
+capteur de mouvement PIR. Une application **Flutter** (iOS, Android, Web)
+permet de l'activer et de la désactiver à distance via le broker
+**HiveMQ Cloud** (MQTT sur TLS).
 
 ```text
-ESP32 (Wokwi)  ⇄  MQTTS :8883  ⇄  HiveMQ Cloud  ⇄  WSS :8884  ⇄  Flutter Web
+ESP32 (Wokwi)  ⇄  MQTTS :8883  ⇄  HiveMQ Cloud  ⇄  WSS :8884   ⇄  Flutter Web
+                                              ⇄  MQTTS :8883 ⇄  Flutter iOS / Android
 ```
 
 > 🚧 Projet en cours de réalisation. Ce README sera finalisé à l'étape 7.
@@ -15,8 +17,13 @@ ESP32 (Wokwi)  ⇄  MQTTS :8883  ⇄  HiveMQ Cloud  ⇄  WSS :8884  ⇄  Flutter
 - Activer et désactiver l'alarme depuis Flutter, avec confirmation par l'ESP32.
 - Trois états : `DISARMED`, `ARMED`, `TRIGGERED`.
 - Sirène (buzzer) et LED rouge clignotante en cas d'intrusion.
-- Historique des détections pendant la session.
 - Affichage de la connexion au broker et de la disponibilité de l'ESP32 (Last Will).
+- **Journal d'activité conservé sur l'appareil** : activations, désactivations,
+  intrusions et détections, regroupés par jour et filtrables.
+- **Réglages dans l'application** : broker MQTT modifiable sans recompiler,
+  identifiants stockés dans le Trousseau iOS / Keystore Android.
+- **Désactivation protégée** (option) par Face ID, Touch ID ou code de l'appareil.
+- **Vibration** de l'appareil à chaque intrusion.
 
 ## Structure du dépôt
 
@@ -28,7 +35,7 @@ smartalarm/
 │   ├── mqtt-topics.md    # contrat MQTT (topics, payloads, QoS, retained)
 │   └── setup.md          # installation et configuration
 ├── esp32/                # sketch Wokwi (étapes 3 et 4)
-└── flutter_app/          # application Flutter (étapes 5 et 6)
+└── flutter_app/          # application Flutter (étapes 5, 6 et 6 bis)
 ```
 
 ## Documentation
@@ -46,7 +53,8 @@ smartalarm/
 | 3 | Circuit Wokwi (logique locale) | ✅ |
 | 4 | ESP32 et MQTT | ✅ |
 | 5 | Initialisation Flutter et service MQTT | ✅ |
-| 6 | Dashboard Flutter | 🔄 en attente de validation |
+| 6 | Dashboard Flutter | ✅ |
+| 6 bis | Version iOS, journal persistant, réglages, Face ID, vibration | ✅ |
 | 7 | Tests finaux et documentation | ⏳ |
 
 ## Sécurité

@@ -1,5 +1,7 @@
+import 'package:smartalarm/config/mqtt_config.dart';
 import 'package:smartalarm/models/alarm_event.dart';
 import 'package:smartalarm/services/journal_store.dart';
+import 'package:smartalarm/services/settings_store.dart';
 
 /// Journal stocké en mémoire.
 class MemoryJournalStore implements JournalStore {
@@ -17,3 +19,19 @@ class MemoryJournalStore implements JournalStore {
     saved = List.of(events);
   }
 }
+
+/// Réglages stockés en mémoire.
+class MemorySettingsStore implements SettingsStore {
+  MqttConfig? broker;
+
+  @override
+  Future<MqttConfig?> loadBrokerConfig() async => broker;
+  @override
+  Future<void> saveBrokerConfig(MqttConfig? config) async => broker = config;
+}
+
+const testBrokerConfig = MqttConfig(
+  host: 'build.s1.eu.hivemq.cloud',
+  username: 'flutter',
+  password: 'secret',
+);

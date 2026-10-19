@@ -15,9 +15,16 @@ import 'journal_screen.dart';
 /// Écran principal. Tout ce qui est affiché provient des messages MQTT
 /// relayés par [AlarmController].
 class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key, required this.controller});
+  const DashboardScreen({
+    super.key,
+    required this.controller,
+    this.deviceId = 'demo01',
+    this.onOpenSettings,
+  });
 
   final AlarmController controller;
+  final String deviceId;
+  final VoidCallback? onOpenSettings;
 
   static const double _wideBreakpoint = 860;
   static const double _maxContentWidth = 1120;
@@ -43,6 +50,8 @@ class DashboardScreen extends StatelessWidget {
                         DashboardHeader(
                           brokerStatus: controller.brokerStatus,
                           availability: controller.availability,
+                          deviceId: deviceId,
+                          onOpenSettings: onOpenSettings,
                         ),
                         const SizedBox(height: 20),
                         _Banners(controller: controller),

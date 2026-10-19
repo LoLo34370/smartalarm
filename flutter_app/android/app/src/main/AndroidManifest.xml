@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Connexion MQTT/TLS au broker HiveMQ (requise aussi en release). -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Confirmation biométrique avant de désactiver l'alarme (local_auth). -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
     <application
         android:label="SmartAlarm"
         android:name="${applicationName}"

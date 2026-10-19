@@ -232,7 +232,30 @@ flutter run -d chrome --dart-define-from-file=config/dart_defines.json
 ```
 
 Sans `--dart-define-from-file`, l'application affiche « Configuration MQTT
-incomplète » au lieu de se connecter.
+incomplète » au lieu de se connecter. On peut aussi saisir le broker
+directement dans l'écran **Réglages** (icône ⚙︎ en haut à droite).
+
+### Lancement (iOS)
+
+Prérequis : Xcode et CocoaPods (`pod --version`).
+
+```bash
+cd flutter_app
+open -a Simulator                     # ou brancher un iPhone
+flutter run -d ios --dart-define-from-file=config/dart_defines.json
+```
+
+- Sur iOS, l'application utilise `MqttServerClient` en **TLS sur le port 8883**,
+  comme Android. Le certificat du broker est validé par le magasin iOS.
+- **Face ID sur le simulateur** : menu *Features → Face ID → Enrolled*, puis,
+  quand la demande s'affiche, *Features → Face ID → Matching Face* (ou
+  *Non-matching Face* pour tester un refus).
+- **Sur un iPhone réel** : ouvrir `ios/Runner.xcworkspace` dans Xcode, choisir
+  une équipe dans *Signing & Capabilities* (un compte Apple gratuit suffit).
+- Limite connue : iOS suspend les connexions réseau d'une application en
+  arrière-plan. Les alertes ne sont reçues que lorsque l'application est
+  ouverte. Une vraie notification à application fermée exigerait des
+  notifications push (APNs) émises par un serveur, hors périmètre.
 
 ### Choix techniques
 
@@ -247,22 +270,33 @@ incomplète » au lieu de se connecter.
 | Reconnexion | Tentatives initiales gérées par le service (2 s, 4 s, 8 s… jusqu'à 30 s), puis `autoReconnect` de la bibliothèque, avec réabonnement automatique |
 | Resynchronisation | À chaque (ré)abonnement, le broker renvoie les messages retained `state` et `availability` |
 | Commandes | QoS 1, jamais retained. L'état affiché ne change qu'à la réception du `state` publié par l'ESP32. |
+| Journal | `shared_preferences` : 200 dernières entrées, horodatées à la réception. Seules les vraies transitions sont journalisées (pas l'état retained reçu à chaque connexion). |
+| Réglages | Broker saisi dans l'app prioritaire sur `--dart-define`, stocké avec `flutter_secure_storage` (Trousseau iOS, Keystore Android). Un changement relance une connexion neuve. |
+| Face ID | `local_auth`, repli sur le code de l'appareil. Exigé uniquement pour DISARM, jamais pour ARM. Indisponible sur le web. |
 
 ### Organisation du code
 
 ```text
 lib/
-├── main.dart                       # crée MqttService + AlarmController, lance le dashboard
+├── main.dart                       # charge les réglages, crée MqttService + AlarmController,
+│                                   # recrée la connexion si le broker change
 ├── config/   mqtt_config.dart      # paramètres --dart-define
 │             app_theme.dart        # Material 3, couleurs vert / rouge / gris
 ├── models/   alarm_models.dart     # AlarmState, AlarmCommand, DeviceAvailability, MotionEvent
+│             alarm_event.dart      # entrée du journal d'activité
 │             mqtt_topics.dart
 ├── services/ alarm_connection.dart # interface (remplacée par un faux dans les tests)
 │             mqtt_service.dart     # connexion, reconnexion, abonnements, commandes
-│             mqtt_client_factory*  # client WSS (web) / TLS (Android)
-├── controllers/ alarm_controller.dart  # état affiché, attente de confirmation, historique
+│             mqtt_client_factory*  # client WSS (web) / TLS (iOS, Android)
+│             journal_store.dart    # persistance du journal
+│             settings_store.dart   # persistance des réglages (stockage chiffré)
+│             device_authenticator.dart # Face ID / Touch ID / code
+├── controllers/ alarm_controller.dart    # état affiché, attente de confirmation, journal
+│                settings_controller.dart # broker effectif, protection du désarmement
 ├── screens/  dashboard_screen.dart # mise en page responsive (1 ou 2 colonnes)
-└── widgets/                        # en-tête, bandeaux, carte d'état, bouton, PIR, sirène, historique
+│             journal_screen.dart   # journal complet, filtres, regroupé par jour
+│             settings_screen.dart  # broker MQTT, sécurité, données
+└── widgets/                        # en-tête, bandeaux, carte d'état, bouton, PIR, sirène, journal
 ```
 
 Règles du dashboard :
@@ -271,13 +305,17 @@ Règles du dashboard :
   avertissement si rien n'arrive sous 10 s.
 - Commandes désactivées si le broker est déconnecté ou si l'ESP32 est `offline`.
   L'état reste affiché avec le badge « Dernier état connu ».
-- Historique : 20 dernières détections de la session, horodatées à la réception.
+- Journal : la carte « Activité récente » montre les 6 dernières entrées,
+  « Tout voir » ouvre le journal complet.
+- Désactivation protégée (si activée dans les réglages) : le bouton affiche
+  « Confirmation de votre identité… » ; en cas de refus, rien n'est envoyé.
 
 ### Vérifications
 
 ```bash
 flutter analyze                         # analyse statique
-flutter test --exclude-tags live        # tests unitaires et widgets (21 tests)
+flutter test --exclude-tags live        # tests unitaires et widgets (37 tests)
+flutter build ios --simulator --debug   # vérifie la compilation iOS
 # Test réel dans Chrome (client WSS) — ESP32 simulé démarré :
 flutter test --platform chrome --tags live \
   --dart-define-from-file=config/dart_defines.json test/mqtt_live_test.dart
@@ -291,6 +329,8 @@ flutter test --platform chrome --tags live \
 
 - ESP32 : `esp32/config.h` (ignoré par Git), créé à partir de `esp32/config.example.h`.
 - Flutter : identifiants passés au lancement via `--dart-define`, jamais écrits en dur dans le code.
+  Ou saisis dans l'écran Réglages : ils sont alors stockés chiffrés sur l'appareil
+  (Trousseau iOS, Keystore Android), et non compilés dans l'application.
 
 > ⚠️ **Flutter Web et identifiants** : tout paramètre compilé dans une
 > application web (y compris via `--dart-define`) se retrouve dans le

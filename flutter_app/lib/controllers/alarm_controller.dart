@@ -2,8 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../models/alarm_event.dart';
 import '../models/alarm_models.dart';
 import '../services/alarm_connection.dart';
+import '../services/device_authenticator.dart';
+import '../services/journal_store.dart';
 
 /// Ce que le capteur PIR signifie pour l'utilisateur, déduit de l'état publié.
 enum PirStatus { inactive, monitoring, motionDetected }
@@ -12,26 +15,46 @@ enum PirStatus { inactive, monitoring, motionDetected }
 ///
 /// Un clic sur « Activer » n'arme rien localement : il envoie une commande et
 /// passe en attente ([pendingCommand]) jusqu'à ce que l'ESP32 publie son état.
+///
+/// Les changements d'état confirmés et les détections alimentent un journal
+/// d'activité, conservé sur l'appareil entre deux lancements.
 class AlarmController extends ChangeNotifier {
   AlarmController(
     this._connection, {
     this.commandTimeout = const Duration(seconds: 10),
-    this.historyLimit = 20,
-  });
+    this.historyLimit = 200,
+    JournalStore? journalStore,
+    DeviceAuthenticator? authenticator,
+    bool requireAuthToDisarm = false,
+    this.onIntrusion,
+    DateTime Function()? clock,
+  })  : _journalStore = journalStore,
+        _authenticator = authenticator,
+        _requireAuthToDisarm = requireAuthToDisarm,
+        _clock = clock ?? DateTime.now;
 
   final AlarmConnection _connection;
+  final JournalStore? _journalStore;
+  final DeviceAuthenticator? _authenticator;
+  final DateTime Function() _clock;
 
   /// Délai au-delà duquel une commande non confirmée est signalée.
   final Duration commandTimeout;
 
-  /// Nombre maximal de détections conservées pendant la session.
+  /// Nombre maximal d'entrées conservées dans le journal.
   final int historyLimit;
 
+  /// Appelé quand l'alarme passe en TRIGGERED (vibration de l'appareil…).
+  final VoidCallback? onIntrusion;
+
   final List<StreamSubscription<Object>> _subscriptions = [];
-  final List<MotionEvent> _motionHistory = [];
+  final List<AlarmEvent> _journal = [];
   Timer? _commandTimer;
   bool _started = false;
   bool _disposed = false;
+  bool _journalLoaded = false;
+  bool _authenticating = false;
+  bool _requireAuthToDisarm;
 
   AlarmState? _alarmState;
   DeviceAvailability _availability = DeviceAvailability.unknown;
@@ -53,8 +76,23 @@ class AlarmController extends ChangeNotifier {
   /// Avertissement lié à la dernière commande (non envoyée, non confirmée…).
   String? get commandWarning => _commandWarning;
 
-  /// Détections reçues pendant la session, la plus récente en premier.
-  List<MotionEvent> get motionHistory => List.unmodifiable(_motionHistory);
+  /// Journal d'activité, l'entrée la plus récente en premier.
+  List<AlarmEvent> get journal => List.unmodifiable(_journal);
+
+  /// Dernière détection de mouvement connue.
+  AlarmEvent? get lastMotion =>
+      _journal.where((e) => e.kind == AlarmEventKind.motion).firstOrNull;
+
+  /// Une confirmation Face ID / Touch ID / code est demandée avant DISARM.
+  bool get requireAuthToDisarm => _requireAuthToDisarm && _authenticator != null;
+  set requireAuthToDisarm(bool value) {
+    if (value == _requireAuthToDisarm) return;
+    _requireAuthToDisarm = value;
+    _notify();
+  }
+
+  /// La demande d'authentification système est affichée.
+  bool get isAuthenticating => _authenticating;
 
   bool get isBrokerConnected => brokerStatus == BrokerStatus.connected;
   bool get isDeviceOnline => _availability == DeviceAvailability.online;
@@ -71,7 +109,7 @@ class AlarmController extends ChangeNotifier {
         AlarmState.disarmed || null => AlarmCommand.arm,
       };
 
-  bool get canSendCommand => isLive && _pendingCommand == null;
+  bool get canSendCommand => isLive && _pendingCommand == null && !_authenticating;
 
   PirStatus get pirStatus => switch (_alarmState) {
         AlarmState.armed => PirStatus.monitoring,
@@ -93,6 +131,7 @@ class AlarmController extends ChangeNotifier {
       _connection.motions.listen(_onMotion),
     ]);
     _connection.connect();
+    _loadJournal();
   }
 
   @override
@@ -112,7 +151,25 @@ class AlarmController extends ChangeNotifier {
   // ── Actions ────────────────────────────────────────────────────────────────
 
   /// Envoie [nextCommand]. L'état ne changera qu'à la confirmation de l'ESP32.
-  void toggleAlarm() => sendCommand(nextCommand);
+  /// Si la protection est activée, DISARM exige d'abord l'authentification.
+  Future<void> toggleAlarm() async {
+    final command = nextCommand;
+    if (!canSendCommand) return;
+    if (command == AlarmCommand.disarm && requireAuthToDisarm) {
+      _authenticating = true;
+      _notify();
+      final confirmed = await _authenticator!
+          .authenticate('Confirmez votre identité pour désactiver l\'alarme');
+      _authenticating = false;
+      if (_disposed) return;
+      if (!confirmed) {
+        _commandWarning = 'Désactivation annulée : identité non confirmée.';
+        _notify();
+        return;
+      }
+    }
+    sendCommand(command);
+  }
 
   void sendCommand(AlarmCommand command) {
     if (!canSendCommand) return;
@@ -133,17 +190,27 @@ class AlarmController extends ChangeNotifier {
     _notify();
   }
 
-  void clearMotionHistory() {
-    _motionHistory.clear();
+  void clearJournal() {
+    _journal.clear();
+    _persistJournal();
     _notify();
   }
 
   // ── Messages MQTT ──────────────────────────────────────────────────────────
 
   void _onAlarmState(AlarmState state) {
+    final previous = _alarmState;
     _alarmState = state;
     // L'ESP32 publie son état après chaque commande : c'est la confirmation.
     _clearPending();
+    // Le premier état reçu est l'instantané retained, pas un changement :
+    // on ne journalise que les vraies transitions.
+    if (previous != null && previous != state) {
+      _record(AlarmEvent(kind: AlarmEventKind.fromState(state), at: _clock()));
+    }
+    if (state == AlarmState.triggered && previous != AlarmState.triggered) {
+      onIntrusion?.call();
+    }
     _notify();
   }
 
@@ -156,10 +223,7 @@ class AlarmController extends ChangeNotifier {
   }
 
   void _onMotion(MotionEvent event) {
-    _motionHistory.insert(0, event);
-    if (_motionHistory.length > historyLimit) {
-      _motionHistory.removeRange(historyLimit, _motionHistory.length);
-    }
+    _record(AlarmEvent.fromMotion(event));
     _notify();
   }
 
@@ -168,6 +232,53 @@ class AlarmController extends ChangeNotifier {
       _clearPending(warning: 'Connexion au broker perdue avant la confirmation de l\'ESP32.');
     }
     _notify();
+  }
+
+  // ── Journal ────────────────────────────────────────────────────────────────
+
+  void _record(AlarmEvent event) {
+    _journal.insert(0, event);
+    _trimJournal();
+    _persistJournal();
+  }
+
+  void _trimJournal() {
+    if (_journal.length > historyLimit) {
+      _journal.removeRange(historyLimit, _journal.length);
+    }
+  }
+
+  Future<void> _loadJournal() async {
+    final store = _journalStore;
+    if (store == null) {
+      _journalLoaded = true;
+      return;
+    }
+    List<AlarmEvent> stored;
+    try {
+      stored = await store.load();
+    } on Exception catch (error) {
+      debugPrint('Journal illisible, ignoré : $error');
+      stored = [];
+    }
+    if (_disposed) return;
+    final receivedWhileLoading = _journal.isNotEmpty;
+    // Les entrées reçues pendant le chargement sont plus récentes.
+    _journal.addAll(stored);
+    _trimJournal();
+    _journalLoaded = true;
+    if (receivedWhileLoading) _persistJournal();
+    _notify();
+  }
+
+  /// Sauvegarde en arrière-plan. Pas avant la fin du chargement, sinon on
+  /// écraserait le journal stocké par les seules entrées de la session.
+  void _persistJournal() {
+    final store = _journalStore;
+    if (store == null || !_journalLoaded) return;
+    store.save(List.of(_journal)).catchError(
+          (Object error) => debugPrint('Échec de sauvegarde du journal : $error'),
+        );
   }
 
   void _clearPending({String? warning}) {

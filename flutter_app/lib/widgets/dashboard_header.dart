@@ -10,10 +10,14 @@ class DashboardHeader extends StatelessWidget {
     super.key,
     required this.brokerStatus,
     required this.availability,
+    this.deviceId = 'demo01',
+    this.onOpenSettings,
   });
 
   final BrokerStatus brokerStatus;
   final DeviceAvailability availability;
+  final String deviceId;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +47,7 @@ class DashboardHeader extends StatelessWidget {
                   Text('SmartAlarm',
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
-                  Text('Alarme connectée · demo01',
+                  Text('Alarme connectée · $deviceId',
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary)),
                 ],
@@ -57,6 +61,17 @@ class DashboardHeader extends StatelessWidget {
           children: [
             _brokerPill(brokerStatus),
             _devicePill(availability, brokerConnected: brokerStatus == BrokerStatus.connected),
+            if (onOpenSettings != null)
+              SizedBox(
+                height: 32,
+                child: IconButton.filledTonal(
+                  tooltip: 'Réglages',
+                  padding: EdgeInsets.zero,
+                  iconSize: 18,
+                  onPressed: onOpenSettings,
+                  icon: const Icon(Icons.settings_rounded),
+                ),
+              ),
           ],
         ),
       ],

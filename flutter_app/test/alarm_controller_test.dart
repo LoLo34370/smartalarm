@@ -1,9 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:smartalarm/controllers/alarm_controller.dart';
+import 'package:smartalarm/models/alarm_event.dart';
 import 'package:smartalarm/models/alarm_models.dart';
 import 'package:smartalarm/services/alarm_connection.dart';
 
 import 'helpers/fake_alarm_connection.dart';
+import 'helpers/fakes.dart';
 
 void main() {
   late FakeAlarmConnection connection;
@@ -38,20 +40,27 @@ void main() {
     expect(controller.pirStatus, PirStatus.monitoring);
   });
 
-  test('ARM n\'arme rien localement : on attend la confirmation de l\'ESP32', () {
-    connection.goLive(AlarmState.disarmed);
+  test(
+    'ARM n\'arme rien localement : on attend la confirmation de l\'ESP32',
+    () {
+      connection.goLive(AlarmState.disarmed);
 
-    controller.toggleAlarm();
-    expect(connection.sentCommands, [AlarmCommand.arm]);
-    expect(controller.pendingCommand, AlarmCommand.arm);
-    expect(controller.alarmState, AlarmState.disarmed, reason: 'pas de changement artificiel');
-    expect(controller.canSendCommand, isFalse, reason: 'pas de double envoi');
+      controller.toggleAlarm();
+      expect(connection.sentCommands, [AlarmCommand.arm]);
+      expect(controller.pendingCommand, AlarmCommand.arm);
+      expect(
+        controller.alarmState,
+        AlarmState.disarmed,
+        reason: 'pas de changement artificiel',
+      );
+      expect(controller.canSendCommand, isFalse, reason: 'pas de double envoi');
 
-    connection.publishState(AlarmState.armed);
-    expect(controller.alarmState, AlarmState.armed);
-    expect(controller.pendingCommand, isNull);
-    expect(controller.commandWarning, isNull);
-  });
+      connection.publishState(AlarmState.armed);
+      expect(controller.alarmState, AlarmState.armed);
+      expect(controller.pendingCommand, isNull);
+      expect(controller.commandWarning, isNull);
+    },
+  );
 
   test('signale une commande non confirmée après le délai', () async {
     connection.goLive(AlarmState.disarmed);
@@ -81,7 +90,7 @@ void main() {
     expect(controller.isSirenActive, isTrue);
     expect(controller.pirStatus, PirStatus.motionDetected);
     expect(controller.nextCommand, AlarmCommand.disarm);
-    expect(controller.motionHistory.single.uptimeMs, 125000);
+    expect(controller.lastMotion?.uptimeMs, 125000);
 
     controller.toggleAlarm();
     connection.publishState(AlarmState.disarmed);
@@ -89,16 +98,42 @@ void main() {
     expect(controller.isSirenActive, isFalse);
   });
 
-  test('l\'historique garde les plus récentes, dans la limite fixée', () {
+  test('le journal garde les plus récentes, dans la limite fixée', () {
     connection.goLive(AlarmState.armed);
     for (final uptime in [1000, 2000, 3000, 4000]) {
       connection.publishMotion(uptime);
     }
-    expect(controller.motionHistory.map((e) => e.uptimeMs), [4000, 3000, 2000]);
+    expect(controller.journal.map((e) => e.uptimeMs), [4000, 3000, 2000]);
 
-    controller.clearMotionHistory();
-    expect(controller.motionHistory, isEmpty);
+    controller.clearJournal();
+    expect(controller.journal, isEmpty);
   });
+
+  test(
+    'journal : transitions confirmées seulement, pas l\'instantané retained',
+    () {
+      connection.goLive(AlarmState.disarmed);
+      expect(
+        controller.journal,
+        isEmpty,
+        reason: 'état initial = pas un changement',
+      );
+
+      connection.publishState(AlarmState.armed);
+      connection.publishState(
+        AlarmState.armed,
+      ); // republication sans changement
+      connection.publishMotion(5000);
+      connection.publishState(AlarmState.triggered);
+      connection.publishState(AlarmState.disarmed);
+
+      expect(controller.journal.map((e) => e.kind), [
+        AlarmEventKind.disarmed,
+        AlarmEventKind.triggered,
+        AlarmEventKind.motion,
+      ], reason: 'les 3 plus récentes (limite de ces tests) : ARMED est sorti');
+    },
+  );
 
   test('ESP32 hors ligne : commandes désactivées, dernier état conservé', () {
     connection.goLive(AlarmState.armed);
@@ -111,15 +146,18 @@ void main() {
     expect(connection.sentCommands, isEmpty);
   });
 
-  test('perte du broker pendant une commande : attente annulée et signalée', () {
-    connection.goLive(AlarmState.disarmed);
-    controller.toggleAlarm();
-    connection.status.value = BrokerStatus.reconnecting;
+  test(
+    'perte du broker pendant une commande : attente annulée et signalée',
+    () {
+      connection.goLive(AlarmState.disarmed);
+      controller.toggleAlarm();
+      connection.status.value = BrokerStatus.reconnecting;
 
-    expect(controller.pendingCommand, isNull);
-    expect(controller.commandWarning, contains('Connexion au broker perdue'));
-    expect(controller.canSendCommand, isFalse);
-  });
+      expect(controller.pendingCommand, isNull);
+      expect(controller.commandWarning, contains('Connexion au broker perdue'));
+      expect(controller.canSendCommand, isFalse);
+    },
+  );
 
   test('reconnexion : l\'état retained resynchronise l\'affichage', () {
     connection.goLive(AlarmState.disarmed);
@@ -130,5 +168,98 @@ void main() {
 
     expect(controller.alarmState, AlarmState.armed);
     expect(controller.isLive, isTrue);
+  });
+
+  group('avec persistance, authentification et vibration', () {
+    late FakeAlarmConnection conn;
+    late MemoryJournalStore store;
+    late FakeAuthenticator auth;
+    late int intrusions;
+    AlarmController? ctrl;
+
+    setUp(() {
+      conn = FakeAlarmConnection();
+      store = MemoryJournalStore([
+        AlarmEvent(kind: AlarmEventKind.armed, at: DateTime(2026, 10, 18, 9)),
+      ]);
+      auth = FakeAuthenticator();
+      intrusions = 0;
+    });
+
+    tearDown(() {
+      ctrl?.dispose();
+      conn.dispose();
+    });
+
+    AlarmController build({bool requireAuth = false}) =>
+        ctrl = AlarmController(
+          conn,
+          journalStore: store,
+          authenticator: auth,
+          requireAuthToDisarm: requireAuth,
+          onIntrusion: () => intrusions++,
+          clock: () => DateTime(2026, 10, 19, 12),
+        )..start();
+
+    test(
+      'recharge le journal enregistré et y ajoute les nouvelles entrées',
+      () async {
+        final c = build();
+        // Entrée reçue avant la fin du chargement : elle doit rester en tête.
+        conn.publishMotion(1000, at: DateTime(2026, 10, 19, 11));
+        await pumpEventQueue();
+
+        expect(c.journal.map((e) => e.kind), [
+          AlarmEventKind.motion,
+          AlarmEventKind.armed,
+        ]);
+        expect(store.saved.length, 2, reason: 'rien de perdu à la sauvegarde');
+
+        conn.goLive(AlarmState.armed);
+        conn.publishState(AlarmState.disarmed);
+        await pumpEventQueue();
+        expect(store.saved.first.kind, AlarmEventKind.disarmed);
+        expect(store.saved.first.at, DateTime(2026, 10, 19, 12));
+      },
+    );
+
+    test('vibre une seule fois par intrusion', () async {
+      build();
+      conn.goLive(AlarmState.armed);
+      conn.publishState(AlarmState.triggered);
+      conn.publishState(AlarmState.triggered);
+      expect(intrusions, 1);
+      conn.publishState(AlarmState.disarmed);
+      conn.publishState(AlarmState.armed);
+      conn.publishState(AlarmState.triggered);
+      expect(intrusions, 2);
+    });
+
+    test(
+      'DISARM protégé : envoyé seulement si l\'identité est confirmée',
+      () async {
+        final c = build(requireAuth: true);
+        conn.goLive(AlarmState.armed);
+
+        auth.accept = false;
+        await c.toggleAlarm();
+        expect(conn.sentCommands, isEmpty);
+        expect(c.commandWarning, contains('identité non confirmée'));
+        expect(c.canSendCommand, isTrue);
+
+        auth.accept = true;
+        await c.toggleAlarm();
+        expect(conn.sentCommands, [AlarmCommand.disarm]);
+        expect(auth.reasons, hasLength(2));
+      },
+    );
+
+    test('ARM n\'exige jamais d\'authentification', () async {
+      final c = build(requireAuth: true);
+      conn.goLive(AlarmState.disarmed);
+      await c.toggleAlarm();
+      expect(conn.sentCommands, [AlarmCommand.arm]);
+      expect(auth.reasons, isEmpty);
+    });
   });
 }

@@ -50,4 +50,51 @@ class MqttConfig {
 
   /// URL WSS utilisée par le client navigateur (le port est passé à part).
   String get webSocketUrl => 'wss://$host$webSocketPath';
+
+  /// Identifiant de l'appareil : dernier segment de la base des topics.
+  String get deviceId => topicBase.split('/').last;
+
+  /// Format de stockage des réglages saisis dans l'application.
+  Map<String, Object?> toJson() => {
+        'host': host,
+        'username': username,
+        'password': password,
+        'webSocketPort': webSocketPort,
+        'webSocketPath': webSocketPath,
+        'tlsPort': tlsPort,
+        'topicBase': topicBase,
+      };
+
+  /// Retourne `null` si le contenu stocké est illisible.
+  static MqttConfig? tryFromJson(Object? json) {
+    if (json is! Map<String, Object?>) return null;
+    final host = json['host'], username = json['username'], password = json['password'];
+    if (host is! String || username is! String || password is! String) return null;
+    final wsPort = json['webSocketPort'], wsPath = json['webSocketPath'];
+    final tlsPort = json['tlsPort'], topicBase = json['topicBase'];
+    return MqttConfig(
+      host: host,
+      username: username,
+      password: password,
+      webSocketPort: wsPort is int ? wsPort : 8884,
+      webSocketPath: wsPath is String ? wsPath : '/mqtt',
+      tlsPort: tlsPort is int ? tlsPort : 8883,
+      topicBase: topicBase is String ? topicBase : 'smartalarm/demo01',
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is MqttConfig &&
+      other.host == host &&
+      other.username == username &&
+      other.password == password &&
+      other.webSocketPort == webSocketPort &&
+      other.webSocketPath == webSocketPath &&
+      other.tlsPort == tlsPort &&
+      other.topicBase == topicBase;
+
+  @override
+  int get hashCode =>
+      Object.hash(host, username, password, webSocketPort, webSocketPath, tlsPort, topicBase);
 }

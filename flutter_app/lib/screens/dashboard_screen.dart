@@ -9,14 +9,22 @@ import '../widgets/alarm_status_card.dart';
 import '../widgets/alert_banners.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/device_status_cards.dart';
-import '../widgets/motion_history_card.dart';
+import '../widgets/journal_widgets.dart';
+import 'journal_screen.dart';
 
 /// Écran principal. Tout ce qui est affiché provient des messages MQTT
 /// relayés par [AlarmController].
 class DashboardScreen extends StatelessWidget {
-  const DashboardScreen({super.key, required this.controller});
+  const DashboardScreen({
+    super.key,
+    required this.controller,
+    this.deviceId = 'demo01',
+    this.onOpenSettings,
+  });
 
   final AlarmController controller;
+  final String deviceId;
+  final VoidCallback? onOpenSettings;
 
   static const double _wideBreakpoint = 860;
   static const double _maxContentWidth = 1120;
@@ -42,10 +50,12 @@ class DashboardScreen extends StatelessWidget {
                         DashboardHeader(
                           brokerStatus: controller.brokerStatus,
                           availability: controller.availability,
+                          deviceId: deviceId,
+                          onOpenSettings: onOpenSettings,
                         ),
                         const SizedBox(height: 20),
                         _Banners(controller: controller),
-                        if (wide) _wideLayout() else _narrowLayout(),
+                        if (wide) _wideLayout(context) else _narrowLayout(context),
                       ],
                     ),
                   ),
@@ -58,7 +68,7 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _narrowLayout() => Column(
+  Widget _narrowLayout(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _statusCard(),
@@ -67,11 +77,11 @@ class DashboardScreen extends StatelessWidget {
           const SizedBox(height: 16),
           _deviceCards(),
           const SizedBox(height: 16),
-          _history(),
+          _history(context),
         ],
       );
 
-  Widget _wideLayout() => Row(
+  Widget _wideLayout(BuildContext context) => Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
@@ -88,7 +98,7 @@ class DashboardScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 24),
-          Expanded(flex: 5, child: _history()),
+          Expanded(flex: 5, child: _history(context)),
         ],
       );
 
@@ -107,6 +117,8 @@ class DashboardScreen extends StatelessWidget {
         enabled: controller.canSendCommand,
         disabledReason: _disabledReason(),
         onPressed: controller.toggleAlarm,
+        isAuthenticating: controller.isAuthenticating,
+        requireAuthToDisarm: controller.requireAuthToDisarm,
       );
 
   String? _disabledReason() {
@@ -119,7 +131,7 @@ class DashboardScreen extends StatelessWidget {
     final cards = [
       PirStatusCard(
         status: controller.pirStatus,
-        lastMotion: controller.motionHistory.firstOrNull,
+        lastMotionAt: controller.lastMotion?.at,
       ),
       SirenStatusCard(active: controller.isSirenActive),
     ];
@@ -139,9 +151,11 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _history() => MotionHistoryCard(
-        events: controller.motionHistory,
-        onClear: controller.clearMotionHistory,
+  Widget _history(BuildContext context) => ActivityJournalCard(
+        events: controller.journal,
+        onOpenJournal: () => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => JournalScreen(controller: controller),
+        )),
       );
 }
 

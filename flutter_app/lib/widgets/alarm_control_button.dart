@@ -14,6 +14,8 @@ class AlarmControlButton extends StatelessWidget {
     required this.enabled,
     required this.disabledReason,
     required this.onPressed,
+    this.isAuthenticating = false,
+    this.requireAuthToDisarm = false,
   });
 
   final AlarmCommand nextCommand;
@@ -25,9 +27,15 @@ class AlarmControlButton extends StatelessWidget {
   final String? disabledReason;
   final VoidCallback onPressed;
 
+  /// La demande Face ID / Touch ID / code est à l'écran.
+  final bool isAuthenticating;
+
+  /// DISARM exige une authentification sur l'appareil.
+  final bool requireAuthToDisarm;
+
   @override
   Widget build(BuildContext context) {
-    final isPending = pendingCommand != null;
+    final isPending = pendingCommand != null || isAuthenticating;
     final (label, icon, color) = switch (nextCommand) {
       AlarmCommand.arm => ('Activer l\'alarme', Icons.lock_rounded, AppColors.protected),
       AlarmCommand.disarm when isTriggered =>
@@ -52,8 +60,27 @@ class AlarmControlButton extends StatelessWidget {
                   child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
                 )
               : Icon(icon),
-          label: Text(isPending ? 'En attente de confirmation de l\'ESP32…' : label),
+          label: Text(switch ((isAuthenticating, isPending)) {
+            (true, _) => 'Confirmation de votre identité…',
+            (_, true) => 'En attente de confirmation de l\'ESP32…',
+            _ => label,
+          }),
         ),
+        if (requireAuthToDisarm && nextCommand == AlarmCommand.disarm && !isPending) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.face_rounded, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              Text('Confirmation d\'identité demandée',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: AppColors.textSecondary)),
+            ],
+          ),
+        ],
         if (!enabled && !isPending && disabledReason != null) ...[
           const SizedBox(height: 8),
           Text(

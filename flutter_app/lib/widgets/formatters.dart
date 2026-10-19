@@ -17,3 +17,29 @@ String formatUptime(int uptimeMs) {
       ? '$hours h ${_two(minutes)} min'
       : '$minutes min ${_two(seconds)} s';
 }
+
+const _weekdays = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const _months = [
+  'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+  'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre',
+];
+
+bool isSameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
+
+/// « Aujourd'hui », « Hier » ou « lundi 19 octobre » (année ajoutée si besoin).
+String formatDay(DateTime day, {DateTime? now}) {
+  final today = now ?? DateTime.now();
+  if (isSameDay(day, today)) return 'Aujourd\'hui';
+  if (isSameDay(day, today.subtract(const Duration(days: 1)))) return 'Hier';
+  final label = '${_weekdays[day.weekday - 1]} ${day.day} ${_months[day.month - 1]}';
+  return day.year == today.year ? label : '$label ${day.year}';
+}
+
+/// Heure seule le jour même, sinon « 19/10 14:05 ».
+String formatShortDateTime(DateTime time, {DateTime? now}) {
+  final hhmm = '${_two(time.hour)}:${_two(time.minute)}';
+  return isSameDay(time, now ?? DateTime.now())
+      ? formatTime(time)
+      : '${_two(time.day)}/${_two(time.month)} $hhmm';
+}

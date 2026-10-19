@@ -1,14 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // SmartAlarm — ESP32 (Wokwi)
 // Étape 4 : Wi-Fi + MQTT sécurisé (TLS) vers HiveMQ Cloud.
+// Étape 6 ter : plusieurs capteurs et mode nuit.
 //
 // L'ESP32 est la SOURCE DE VÉRITÉ de l'état de l'alarme :
-//   - il reçoit les commandes ARM / DISARM sur  <base>/command
-//   - il publie son état (retained)          sur  <base>/state
-//   - il publie chaque détection              sur  <base>/motion
-//   - il publie online / offline (retained)   sur  <base>/availability (+ Last Will)
+//   - il reçoit les commandes ARM / ARM_NIGHT / DISARM sur  <base>/command
+//   - il publie son état (retained)                     sur  <base>/state
+//   - il publie chaque détection                         sur  <base>/motion
+//   - il publie l'état des capteurs (retained)           sur  <base>/sensors
+//   - il publie online / offline (retained)              sur  <base>/availability (+ Last Will)
 //
-// Les commandes ARM / DISARM restent aussi utilisables depuis le moniteur série
+// Capteurs : PIR du salon (intérieur), contacts de la porte d'entrée et de la
+// fenêtre (périmètre). ARMED surveille tout ; ARMED_NIGHT seulement le
+// périmètre, pour pouvoir circuler dans la maison la nuit.
+//
+// Les commandes restent aussi utilisables depuis le moniteur série
 // (débogage). Elles passent par la même fonction handleCommand().
 // ─────────────────────────────────────────────────────────────────────────────
 #include <Arduino.h>
@@ -20,12 +26,15 @@
 
 // ── Brochage (voir docs/architecture.md) ────────────────────────────────────
 constexpr uint8_t PIN_PIR       = 13;  // entrée : sortie OUT du capteur PIR
+constexpr uint8_t PIN_DOOR      = 14;  // entrée (pull-up) : contact porte d'entrée
+constexpr uint8_t PIN_WINDOW    = 32;  // entrée (pull-up) : contact fenêtre
 constexpr uint8_t PIN_BUZZER    = 25;  // sortie : sirène
 constexpr uint8_t PIN_LED_GREEN = 26;  // sortie : alarme activée
 constexpr uint8_t PIN_LED_RED   = 27;  // sortie : intrusion
 
 // ── Réglages de la sirène et du clignotement ────────────────────────────────
 constexpr uint32_t RED_BLINK_MS     = 250;   // demi-période de clignotement LED rouge
+constexpr uint32_t NIGHT_BLINK_MS   = 1000;  // demi-période de la LED verte en mode nuit
 constexpr uint32_t SIREN_STEP_MS    = 400;   // alternance des deux tons de la sirène
 constexpr uint16_t SIREN_FREQ_LOW   = 880;   // Hz
 constexpr uint16_t SIREN_FREQ_HIGH  = 1320;  // Hz
@@ -40,6 +49,7 @@ const String TOPIC_COMMAND      = String(TOPIC_BASE) + "/command";
 const String TOPIC_STATE        = String(TOPIC_BASE) + "/state";
 const String TOPIC_MOTION       = String(TOPIC_BASE) + "/motion";
 const String TOPIC_AVAILABILITY = String(TOPIC_BASE) + "/availability";
+const String TOPIC_SENSORS      = String(TOPIC_BASE) + "/sensors";
 
 WiFiClientSecure tlsClient;
 PubSubClient     mqtt(tlsClient);
@@ -50,25 +60,61 @@ uint32_t lastWifiAttemptMs = 0;
 uint32_t lastMqttAttemptMs = 0;
 
 // ── Machine à états ─────────────────────────────────────────────────────────
-enum class AlarmState { DISARMED, ARMED, TRIGGERED };
+enum class AlarmState { DISARMED, ARMED, ARMED_NIGHT, TRIGGERED };
 
 AlarmState alarmState = AlarmState::DISARMED;
 
-bool     lastPirLevel   = LOW;   // pour détecter le front montant LOW → HIGH
+// ── Capteurs ────────────────────────────────────────────────────────────────
+// Un capteur est « actif » quand son entrée est HIGH : mouvement pour le PIR,
+// contact ouvert pour la porte et la fenêtre (l'interrupteur fermé relie
+// l'entrée à GND, la résistance de pull-up interne la tire à HIGH sinon).
+enum class SensorZone { PERIMETER, INTERIOR };
+
+struct Sensor {
+  const char *id;           // identifiant dans les messages MQTT
+  uint8_t     pin;
+  SensorZone  zone;
+  bool        isContact;    // contact d'ouverture (sinon : détecteur de mouvement)
+  bool        lastLevel;    // pour détecter le front montant LOW → HIGH
+};
+
+Sensor sensors[] = {
+  {"pir_salon", PIN_PIR,    SensorZone::INTERIOR,  false, LOW},
+  {"door",      PIN_DOOR,   SensorZone::PERIMETER, true,  LOW},
+  {"window",    PIN_WINDOW, SensorZone::PERIMETER, true,  LOW},
+};
+
 bool     redLedOn       = false;
+bool     greenLedOn     = false;
 bool     sirenHighTone  = false;
 bool     sirenActive    = false;
 uint32_t lastBlinkMs    = 0;
+uint32_t lastNightBlinkMs = 0;
 uint32_t lastSirenMs    = 0;
 String   serialBuffer;
 
 const char *stateName(AlarmState state) {
   switch (state) {
-    case AlarmState::DISARMED:  return "DISARMED";
-    case AlarmState::ARMED:     return "ARMED";
-    case AlarmState::TRIGGERED: return "TRIGGERED";
+    case AlarmState::DISARMED:    return "DISARMED";
+    case AlarmState::ARMED:       return "ARMED";
+    case AlarmState::ARMED_NIGHT: return "ARMED_NIGHT";
+    case AlarmState::TRIGGERED:   return "TRIGGERED";
   }
   return "UNKNOWN";
+}
+
+// Le capteur déclenche-t-il l'alarme dans l'état courant ?
+bool isMonitored(const Sensor &sensor) {
+  switch (alarmState) {
+    case AlarmState::ARMED:       return true;
+    case AlarmState::ARMED_NIGHT: return sensor.zone == SensorZone::PERIMETER;
+    default:                      return false;
+  }
+}
+
+const char *sensorLevelName(const Sensor &sensor, bool level) {
+  if (sensor.isContact) return level == HIGH ? "OPEN" : "CLOSED";
+  return level == HIGH ? "ACTIVE" : "IDLE";
 }
 
 // ── Publications MQTT ───────────────────────────────────────────────────────
@@ -88,9 +134,11 @@ void publishState() {
   }
 }
 
-void publishMotion(uint32_t uptimeMs) {
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\"event\":\"MOTION_DETECTED\",\"uptimeMs\":%lu}",
+void publishDetection(const Sensor &sensor, uint32_t uptimeMs) {
+  char payload[112];
+  snprintf(payload, sizeof(payload),
+           "{\"event\":\"%s\",\"sensor\":\"%s\",\"uptimeMs\":%lu}",
+           sensor.isContact ? "OPENING_DETECTED" : "MOTION_DETECTED", sensor.id,
            (unsigned long)uptimeMs);
 
   if (mqtt.connected()) {
@@ -98,6 +146,23 @@ void publishMotion(uint32_t uptimeMs) {
     Serial.printf("[MOTION] %s %s\r\n", payload, ok ? "(publié)" : "(ÉCHEC publication)");
   } else {
     Serial.printf("[MOTION] %s (MQTT hors ligne : événement non transmis)\r\n", payload);
+  }
+}
+
+// État courant de chaque capteur, ex. {"pir_salon":"IDLE","door":"CLOSED",...}.
+void publishSensors() {
+  char payload[128];
+  size_t length = snprintf(payload, sizeof(payload), "{");
+  for (size_t i = 0; i < sizeof(sensors) / sizeof(sensors[0]); i++) {
+    length += snprintf(payload + length, sizeof(payload) - length, "%s\"%s\":\"%s\"",
+                       i == 0 ? "" : ",", sensors[i].id,
+                       sensorLevelName(sensors[i], sensors[i].lastLevel));
+  }
+  snprintf(payload + length, sizeof(payload) - length, "}");
+
+  if (mqtt.connected()) {
+    const bool ok = mqtt.publish(TOPIC_SENSORS.c_str(), payload, true);  // retained
+    Serial.printf("[SENSOR] %s %s\r\n", payload, ok ? "(publié)" : "(ÉCHEC publication)");
   }
 }
 
@@ -133,6 +198,14 @@ void applyOutputs() {
       sirenOff();
       break;
 
+    case AlarmState::ARMED_NIGHT:  // LED verte clignotante lente, voir updateAlarmOutputs()
+      greenLedOn       = true;
+      lastNightBlinkMs = millis();
+      digitalWrite(PIN_LED_GREEN, HIGH);
+      digitalWrite(PIN_LED_RED, LOW);
+      sirenOff();
+      break;
+
     case AlarmState::TRIGGERED: {
       const uint32_t now = millis();
       digitalWrite(PIN_LED_GREEN, HIGH);
@@ -158,14 +231,31 @@ void setState(AlarmState newState) {
   publishState();
 }
 
-// Traite une commande ARM / DISARM, quelle que soit sa provenance (MQTT ou série).
+// Arme dans le mode demandé. Un contact déjà ouvert ne déclenchera l'alarme
+// qu'à sa prochaine ouverture : on le signale (l'application l'affiche aussi).
+void arm(AlarmState mode) {
+  // ARM pendant TRIGGERED ne doit pas couper la sirène.
+  if (alarmState == AlarmState::TRIGGERED) {
+    setState(alarmState);
+    return;
+  }
+  for (const Sensor &sensor : sensors) {
+    if (sensor.isContact && sensor.lastLevel == HIGH) {
+      Serial.printf("[ALARM ] attention : %s ouvert à l'activation\r\n", sensor.id);
+    }
+  }
+  setState(mode);
+}
+
+// Traite une commande, quelle que soit sa provenance (MQTT ou série).
 void handleCommand(String command) {
   command.trim();
   command.toUpperCase();
 
   if (command == "ARM") {
-    // ARM pendant TRIGGERED ne doit pas couper la sirène.
-    setState(alarmState == AlarmState::DISARMED ? AlarmState::ARMED : alarmState);
+    arm(AlarmState::ARMED);
+  } else if (command == "ARM_NIGHT") {
+    arm(AlarmState::ARMED_NIGHT);
   } else if (command == "DISARM") {
     setState(AlarmState::DISARMED);
   } else {
@@ -202,13 +292,14 @@ void onMqttMessage(char *topic, byte *payload, unsigned int length) {
   }
   String command;
   if (!extractJsonString(message, "command", command)) {
-    Serial.println("[CMD   ] payload invalide ignoré (attendu {\"command\":\"ARM|DISARM\"})");
+    Serial.println("[CMD   ] payload invalide ignoré "
+                   "(attendu {\"command\":\"ARM|ARM_NIGHT|DISARM\"})");
     return;
   }
   handleCommand(command);
 }
 
-// ── Entrées : série (débogage) et PIR ───────────────────────────────────────
+// ── Entrées : série (débogage) et capteurs ──────────────────────────────────
 
 // Lecture non bloquante d'une ligne sur le moniteur série.
 void readSerialCommand() {
@@ -226,39 +317,52 @@ void readSerialCommand() {
   }
 }
 
-// Détecte un NOUVEAU mouvement : uniquement sur le front montant du PIR.
-void handlePir() {
-  const bool level = digitalRead(PIN_PIR);
-  if (level == lastPirLevel) {
+// Détecte une NOUVELLE détection : uniquement sur le front montant
+// (mouvement qui commence, porte ou fenêtre qui s'ouvre).
+void handleSensor(Sensor &sensor) {
+  const bool level = digitalRead(sensor.pin);
+  if (level == sensor.lastLevel) {
     return;
   }
-  lastPirLevel = level;
-  Serial.printf("[PIR   ] signal %s\r\n", level == HIGH ? "HIGH" : "LOW");
+  sensor.lastLevel = level;
+  Serial.printf("[SENSOR] %s %s\r\n", sensor.id, sensorLevelName(sensor, level));
+  publishSensors();
 
   if (level != HIGH) {
-    return;  // retour à LOW : TRIGGERED reste actif
+    return;  // retour au repos : TRIGGERED reste actif
   }
 
-  switch (alarmState) {
-    case AlarmState::ARMED:
-      publishMotion(millis());
-      setState(AlarmState::TRIGGERED);
-      break;
-    case AlarmState::TRIGGERED:
-      publishMotion(millis());  // nouvelle détection pendant l'alarme : historisée
-      break;
-    case AlarmState::DISARMED:
-      Serial.println("[PIR   ] mouvement ignoré (alarme désactivée)");
-      break;
+  if (alarmState == AlarmState::TRIGGERED) {
+    publishDetection(sensor, millis());  // nouvelle détection pendant l'alarme : historisée
+  } else if (isMonitored(sensor)) {
+    publishDetection(sensor, millis());
+    setState(AlarmState::TRIGGERED);
+  } else {
+    Serial.printf("[SENSOR] %s ignoré (%s)\r\n", sensor.id,
+                  alarmState == AlarmState::ARMED_NIGHT ? "mode nuit" : "alarme désactivée");
   }
 }
 
-// Animation non bloquante de TRIGGERED : LED rouge clignotante + sirène 2 tons.
+void handleSensors() {
+  for (Sensor &sensor : sensors) {
+    handleSensor(sensor);
+  }
+}
+
+// Animation non bloquante : LED verte lente en mode nuit ;
+// LED rouge clignotante + sirène 2 tons en TRIGGERED.
 void updateAlarmOutputs() {
+  const uint32_t now = millis();
+
+  if (alarmState == AlarmState::ARMED_NIGHT && now - lastNightBlinkMs >= NIGHT_BLINK_MS) {
+    lastNightBlinkMs = now;
+    greenLedOn = !greenLedOn;
+    digitalWrite(PIN_LED_GREEN, greenLedOn ? HIGH : LOW);
+  }
+
   if (alarmState != AlarmState::TRIGGERED) {
     return;
   }
-  const uint32_t now = millis();
 
   if (now - lastBlinkMs >= RED_BLINK_MS) {
     lastBlinkMs = now;
@@ -327,7 +431,8 @@ bool connectMqtt() {
   Serial.printf("[MQTT  ] abonnement %s (QoS 1) %s\r\n", TOPIC_COMMAND.c_str(),
                 subscribed ? "OK" : "ÉCHEC");
 
-  publishState();  // resynchronise les clients sur l'état réel
+  publishState();    // resynchronise les clients sur l'état réel
+  publishSensors();
   return true;
 }
 
@@ -374,17 +479,21 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(PIN_PIR, INPUT);
+  pinMode(PIN_DOOR, INPUT_PULLUP);
+  pinMode(PIN_WINDOW, INPUT_PULLUP);
   pinMode(PIN_BUZZER, OUTPUT);
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_RED, OUTPUT);
 
   Serial.println();
   Serial.println("=== SmartAlarm — ESP32 + MQTT ===");
-  Serial.println("Débogage : ARM ou DISARM dans le moniteur série, puis Entrée.");
+  Serial.println("Débogage : ARM, ARM_NIGHT ou DISARM dans le moniteur série, puis Entrée.");
 
   // Sécurité de la démo : on démarre toujours désarmé.
-  alarmState   = AlarmState::DISARMED;
-  lastPirLevel = digitalRead(PIN_PIR);
+  alarmState = AlarmState::DISARMED;
+  for (Sensor &sensor : sensors) {
+    sensor.lastLevel = digitalRead(sensor.pin);
+  }
   applyOutputs();
   publishState();  // MQTT pas encore connecté : sera publié à la connexion
 
@@ -403,7 +512,7 @@ void setup() {
 void loop() {
   maintainConnections();
   readSerialCommand();
-  handlePir();
+  handleSensors();
   updateAlarmOutputs();
   delay(10);  // court : laisse respirer le CPU sans perturber MQTT
 }

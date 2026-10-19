@@ -8,10 +8,10 @@ import 'package:mqtt_client/mqtt_client.dart';
 import '../config/mqtt_config.dart';
 import '../models/alarm_models.dart';
 import '../models/mqtt_topics.dart';
+import 'alarm_connection.dart';
 import 'mqtt_client_factory.dart';
 
-/// État de la connexion de l'application au broker MQTT.
-enum BrokerStatus { disconnected, connecting, connected, reconnecting }
+export 'alarm_connection.dart' show BrokerStatus;
 
 typedef MqttClientBuilder = MqttClient Function(MqttConfig config, String clientId);
 
@@ -21,7 +21,7 @@ typedef MqttClientBuilder = MqttClient Function(MqttConfig config, String client
 /// Le service ne stocke AUCUN état métier : il relaie uniquement ce que
 /// l'ESP32 publie. Grâce aux messages retained, chaque (re)connexion
 /// redélivre immédiatement le dernier `state` et la dernière `availability`.
-class MqttService {
+class MqttService implements AlarmConnection {
   MqttService({required MqttConfig config, MqttClientBuilder? clientBuilder})
       : _config = config,
         _topics = MqttTopics(config.topicBase),
@@ -40,17 +40,22 @@ class MqttService {
   /// et jamais le même que l'ESP32).
   final String clientId;
 
+  @override
   final ValueNotifier<BrokerStatus> status = ValueNotifier(BrokerStatus.disconnected);
 
   /// Dernière erreur lisible par l'utilisateur, `null` si tout va bien.
+  @override
   final ValueNotifier<String?> lastError = ValueNotifier(null);
 
   final _alarmStates = StreamController<AlarmState>.broadcast();
   final _motions = StreamController<MotionEvent>.broadcast();
   final _availability = StreamController<DeviceAvailability>.broadcast();
 
+  @override
   Stream<AlarmState> get alarmStates => _alarmStates.stream;
+  @override
   Stream<MotionEvent> get motions => _motions.stream;
+  @override
   Stream<DeviceAvailability> get availability => _availability.stream;
 
   MqttClient? _client;
@@ -64,6 +69,7 @@ class MqttService {
 
   /// Démarre la connexion. En cas d'échec, réessaie automatiquement avec un
   /// délai croissant (2 s, 4 s, 8 s… plafonné à 30 s) jusqu'à [disconnect].
+  @override
   Future<void> connect() async {
     if (_disposed || _wantConnected) return;
     if (!_config.isComplete) {
@@ -88,6 +94,7 @@ class MqttService {
   /// Publie une commande (QoS 1, jamais retained). L'état affiché ne change
   /// PAS ici : il changera quand l'ESP32 publiera son nouvel état.
   /// Retourne `false` si la commande n'a pas pu être envoyée.
+  @override
   bool sendCommand(AlarmCommand command) {
     final client = _client;
     if (client == null || !isConnected) return false;
@@ -101,6 +108,7 @@ class MqttService {
     }
   }
 
+  @override
   void dispose() {
     if (_disposed) return;
     disconnect();

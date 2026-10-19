@@ -248,11 +248,36 @@ incomplète » au lieu de se connecter.
 | Resynchronisation | À chaque (ré)abonnement, le broker renvoie les messages retained `state` et `availability` |
 | Commandes | QoS 1, jamais retained. L'état affiché ne change qu'à la réception du `state` publié par l'ESP32. |
 
+### Organisation du code
+
+```text
+lib/
+├── main.dart                       # crée MqttService + AlarmController, lance le dashboard
+├── config/   mqtt_config.dart      # paramètres --dart-define
+│             app_theme.dart        # Material 3, couleurs vert / rouge / gris
+├── models/   alarm_models.dart     # AlarmState, AlarmCommand, DeviceAvailability, MotionEvent
+│             mqtt_topics.dart
+├── services/ alarm_connection.dart # interface (remplacée par un faux dans les tests)
+│             mqtt_service.dart     # connexion, reconnexion, abonnements, commandes
+│             mqtt_client_factory*  # client WSS (web) / TLS (Android)
+├── controllers/ alarm_controller.dart  # état affiché, attente de confirmation, historique
+├── screens/  dashboard_screen.dart # mise en page responsive (1 ou 2 colonnes)
+└── widgets/                        # en-tête, bandeaux, carte d'état, bouton, PIR, sirène, historique
+```
+
+Règles du dashboard :
+- L'état affiché ne vient **que** des messages MQTT. Le bouton envoie une
+  commande, affiche « En attente de confirmation de l'ESP32… » et un
+  avertissement si rien n'arrive sous 10 s.
+- Commandes désactivées si le broker est déconnecté ou si l'ESP32 est `offline`.
+  L'état reste affiché avec le badge « Dernier état connu ».
+- Historique : 20 dernières détections de la session, horodatées à la réception.
+
 ### Vérifications
 
 ```bash
 flutter analyze                         # analyse statique
-flutter test --exclude-tags live        # tests unitaires (décodage des messages)
+flutter test --exclude-tags live        # tests unitaires et widgets (21 tests)
 # Test réel dans Chrome (client WSS) — ESP32 simulé démarré :
 flutter test --platform chrome --tags live \
   --dart-define-from-file=config/dart_defines.json test/mqtt_live_test.dart

@@ -1,26 +1,32 @@
 import 'package:flutter/material.dart';
 
+import 'config/app_theme.dart';
 import 'config/mqtt_config.dart';
-import 'screens/mqtt_debug_screen.dart';
+import 'controllers/alarm_controller.dart';
+import 'screens/dashboard_screen.dart';
+import 'services/alarm_connection.dart';
 import 'services/mqtt_service.dart';
 
 void main() {
-  runApp(SmartAlarmApp(service: MqttService(config: MqttConfig.fromEnvironment())));
+  runApp(SmartAlarmApp(connection: MqttService(config: MqttConfig.fromEnvironment())));
 }
 
 class SmartAlarmApp extends StatefulWidget {
-  const SmartAlarmApp({super.key, required this.service});
+  const SmartAlarmApp({super.key, required this.connection});
 
-  final MqttService service;
+  final AlarmConnection connection;
 
   @override
   State<SmartAlarmApp> createState() => _SmartAlarmAppState();
 }
 
 class _SmartAlarmAppState extends State<SmartAlarmApp> {
+  late final AlarmController _controller = AlarmController(widget.connection)..start();
+
   @override
   void dispose() {
-    widget.service.dispose();
+    _controller.dispose();
+    widget.connection.dispose();
     super.dispose();
   }
 
@@ -29,11 +35,8 @@ class _SmartAlarmAppState extends State<SmartAlarmApp> {
     return MaterialApp(
       title: 'SmartAlarm',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF2E7D32)),
-      ),
-      home: MqttDebugScreen(service: widget.service),
+      theme: buildAppTheme(),
+      home: DashboardScreen(controller: _controller),
     );
   }
 }

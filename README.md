@@ -46,7 +46,7 @@ smartalarm/
 | 3 | Circuit Wokwi (logique locale) | ✅ |
 | 4 | ESP32 et MQTT | ✅ |
 | 5 | Initialisation Flutter et service MQTT | ✅ |
-| 6 | Dashboard Flutter | ⏳ |
+| 6 | Dashboard Flutter | 🔄 en attente de validation |
 | 7 | Tests finaux et documentation | ⏳ |
 
 ## Sécurité

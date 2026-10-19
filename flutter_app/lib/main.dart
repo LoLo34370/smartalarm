@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'config/app_theme.dart';
 import 'config/mqtt_config.dart';
@@ -37,6 +38,7 @@ class SmartAlarmApp extends StatefulWidget {
     this.journalStore,
     this.authenticator,
     this.connectionFactory = _mqttConnection,
+    this.onIntrusion = _vibrate,
   });
 
   final SettingsController settings;
@@ -45,8 +47,17 @@ class SmartAlarmApp extends StatefulWidget {
 
   /// Crée la connexion au broker (remplacée par un faux dans les tests).
   final AlarmConnectionFactory connectionFactory;
+  final VoidCallback onIntrusion;
 
   static AlarmConnection _mqttConnection(MqttConfig config) => MqttService(config: config);
+
+  /// Trois vibrations fortes pour signaler l'intrusion (sans effet sur le web).
+  static void _vibrate() async {
+    for (var i = 0; i < 3; i++) {
+      await HapticFeedback.heavyImpact();
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+    }
+  }
 
   @override
   State<SmartAlarmApp> createState() => _SmartAlarmAppState();
@@ -75,6 +86,7 @@ class _SmartAlarmAppState extends State<SmartAlarmApp> {
       journalStore: widget.journalStore,
       authenticator: widget.authenticator,
       requireAuthToDisarm: _settings.requireAuthToDisarm,
+      onIntrusion: widget.onIntrusion,
     )..start();
   }
 

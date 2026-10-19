@@ -66,6 +66,7 @@ void main() {
       await tester.pumpWidget(SmartAlarmApp(
         settings: settings,
         journalStore: MemoryJournalStore(),
+        onIntrusion: () {},
         connectionFactory: (config) {
           final connection = FakeAlarmConnection();
           connections.add((config, connection));

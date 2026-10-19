@@ -170,10 +170,11 @@ void main() {
     expect(controller.isLive, isTrue);
   });
 
-  group('avec persistance et authentification', () {
+  group('avec persistance, authentification et vibration', () {
     late FakeAlarmConnection conn;
     late MemoryJournalStore store;
     late FakeAuthenticator auth;
+    late int intrusions;
     AlarmController? ctrl;
 
     setUp(() {
@@ -182,6 +183,7 @@ void main() {
         AlarmEvent(kind: AlarmEventKind.armed, at: DateTime(2026, 10, 18, 9)),
       ]);
       auth = FakeAuthenticator();
+      intrusions = 0;
     });
 
     tearDown(() {
@@ -195,6 +197,7 @@ void main() {
           journalStore: store,
           authenticator: auth,
           requireAuthToDisarm: requireAuth,
+          onIntrusion: () => intrusions++,
           clock: () => DateTime(2026, 10, 19, 12),
         )..start();
 
@@ -219,6 +222,18 @@ void main() {
         expect(store.saved.first.at, DateTime(2026, 10, 19, 12));
       },
     );
+
+    test('vibre une seule fois par intrusion', () async {
+      build();
+      conn.goLive(AlarmState.armed);
+      conn.publishState(AlarmState.triggered);
+      conn.publishState(AlarmState.triggered);
+      expect(intrusions, 1);
+      conn.publishState(AlarmState.disarmed);
+      conn.publishState(AlarmState.armed);
+      conn.publishState(AlarmState.triggered);
+      expect(intrusions, 2);
+    });
 
     test(
       'DISARM protégé : envoyé seulement si l\'identité est confirmée',

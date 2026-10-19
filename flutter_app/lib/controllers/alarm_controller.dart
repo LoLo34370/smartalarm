@@ -26,6 +26,7 @@ class AlarmController extends ChangeNotifier {
     JournalStore? journalStore,
     DeviceAuthenticator? authenticator,
     bool requireAuthToDisarm = false,
+    this.onIntrusion,
     DateTime Function()? clock,
   })  : _journalStore = journalStore,
         _authenticator = authenticator,
@@ -42,6 +43,9 @@ class AlarmController extends ChangeNotifier {
 
   /// Nombre maximal d'entrées conservées dans le journal.
   final int historyLimit;
+
+  /// Appelé quand l'alarme passe en TRIGGERED (vibration de l'appareil…).
+  final VoidCallback? onIntrusion;
 
   final List<StreamSubscription<Object>> _subscriptions = [];
   final List<AlarmEvent> _journal = [];
@@ -203,6 +207,9 @@ class AlarmController extends ChangeNotifier {
     // on ne journalise que les vraies transitions.
     if (previous != null && previous != state) {
       _record(AlarmEvent(kind: AlarmEventKind.fromState(state), at: _clock()));
+    }
+    if (state == AlarmState.triggered && previous != AlarmState.triggered) {
+      onIntrusion?.call();
     }
     _notify();
   }

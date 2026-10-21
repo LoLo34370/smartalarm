@@ -1,7 +1,7 @@
 # SmartAlarm 🏠🔔
 
-Alarme domestique connectée : un **ESP32** simulé sur **Wokwi** surveille un
-capteur de mouvement PIR et les contacts d'une porte et d'une fenêtre. Une application **Flutter** (iOS, Android, Web)
+Alarme domestique connectée : un **ESP32** simulé sur **Wokwi** surveille
+deux capteurs de mouvement PIR (salon et chambre) et les contacts d'une porte et d'une fenêtre. Une application **Flutter** (iOS, Android, Web)
 permet de l'activer et de la désactiver à distance via le broker
 **HiveMQ Cloud** (MQTT sur TLS).
 
@@ -16,6 +16,9 @@ ESP32 (Wokwi)  ⇄  MQTTS :8883  ⇄  HiveMQ Cloud  ⇄  WSS :8884   ⇄  Flutte
 
 - Activer et désactiver l'alarme depuis Flutter, avec confirmation par l'ESP32.
 - Quatre états : `DISARMED`, `ARMED`, `ARMED_NIGHT`, `TRIGGERED`.
+- **Détection par pièce** : salon, chambre, entrée. Un mouvement dans la
+  chambre affiche « Intrusion dans la chambre », et seule cette pièce passe en
+  alerte.
 - **Mode nuit** : seules la porte et la fenêtre sont surveillées, on peut
   circuler dans la maison sans déclencher le PIR.
 - **État des capteurs en direct** dans l'application, avec un avertissement
@@ -60,6 +63,7 @@ smartalarm/
 | 6 | Dashboard Flutter | ✅ |
 | 6 bis | Version iOS, journal persistant, réglages, Face ID, vibration | ✅ |
 | 6 ter | Capteurs de porte et de fenêtre, mode nuit | ✅ |
+| 6 quater | Détection par pièce (PIR de la chambre) | ✅ |
 | 7 | Tests finaux et documentation | ⏳ |
 
 ## Sécurité

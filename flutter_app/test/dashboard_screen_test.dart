@@ -76,7 +76,12 @@ void main() {
   testWidgets('mode nuit : ARM_NIGHT, PIR ignoré, intrusion par la fenêtre', (tester) async {
     await pumpDashboard(tester, const Size(390, 844));
     connection.goLive(AlarmState.disarmed);
-    connection.publishSensors({Sensor.pirSalon: false, Sensor.door: false, Sensor.window: true});
+    connection.publishSensors({
+      Sensor.pirSalon: false,
+      Sensor.pirChambre: false,
+      Sensor.door: false,
+      Sensor.window: true,
+    });
     await tester.pump();
     expect(find.textContaining('Fenêtre ouverte'), findsOneWidget);
 
@@ -88,15 +93,54 @@ void main() {
     connection.publishState(AlarmState.armedNight);
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('Mode nuit'), findsOneWidget);
-    expect(find.text('Ignoré la nuit'), findsOneWidget);
+    expect(find.text('Ignoré la nuit'), findsNWidgets(2), reason: 'PIR salon et chambre');
     expect(find.text('Surveillé'), findsNWidgets(2));
 
     connection.publishDetection(8000, sensor: Sensor.window);
     connection.publishState(AlarmState.triggered);
     await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Intrusion dans la chambre !'), findsOneWidget);
     expect(find.textContaining('Ouverture : Fenêtre.'), findsOneWidget);
     expect(find.text('Intrusion !'), findsOneWidget);
     expect(find.text('Ouverture détectée'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('détection par pièce : intrusion dans la chambre, rien dans le salon',
+      (tester) async {
+    await pumpDashboard(tester, const Size(390, 844));
+    connection.goLive(AlarmState.armed);
+    await tester.pump();
+    expect(find.text('Salon'), findsOneWidget);
+    expect(find.text('Chambre'), findsOneWidget);
+    expect(find.text('Entrée'), findsOneWidget);
+
+    connection.publishDetection(9000, sensor: Sensor.pirChambre);
+    connection.publishState(AlarmState.triggered);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Intrusion dans la chambre !'), findsOneWidget);
+    expect(find.textContaining('Mouvement : Mouvement chambre.'), findsOneWidget);
+    expect(find.text('Intrusion dans la chambre'), findsOneWidget, reason: 'en-tête de la pièce');
+    expect(find.text('Intrusion !'), findsOneWidget, reason: 'seul le PIR chambre');
+    expect(find.textContaining('Intrusion dans le salon'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('intrusion salon puis chambre : les deux pièces en alerte', (tester) async {
+    await pumpDashboard(tester, const Size(390, 844));
+    connection.goLive(AlarmState.armed);
+    connection.publishDetection(9000, sensor: Sensor.pirSalon);
+    connection.publishState(AlarmState.triggered);
+    connection.publishDetection(16000, sensor: Sensor.pirChambre);
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('Intrusion dans le salon et dans la chambre !'), findsOneWidget);
+    expect(
+      find.textContaining('Mouvement : Mouvement salon, puis Mouvement : Mouvement chambre.'),
+      findsOneWidget,
+    );
+    expect(find.text('Intrusion !'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 

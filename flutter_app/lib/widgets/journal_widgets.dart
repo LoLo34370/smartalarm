@@ -83,7 +83,7 @@ class JournalEventTile extends StatelessWidget {
                 Text(
                   switch ((sensor, uptime)) {
                     (final Sensor s, final int u) =>
-                      '${s.label} · ESP32 allumé depuis ${formatUptime(u)}',
+                      '${s.room.label} · ${s.label} · ESP32 allumé depuis ${formatUptime(u)}',
                     _ => 'Confirmé par l\'ESP32',
                   },
                   style: textTheme.bodySmall?.copyWith(color: AppColors.textSecondary),

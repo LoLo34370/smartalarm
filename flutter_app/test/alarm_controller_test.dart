@@ -82,6 +82,50 @@ void main() {
     expect(controller.commandWarning, contains('n\'a pas pu être envoyée'));
   });
 
+  test('détection par pièce : seule la chambre passe en intrusion', () {
+    connection.goLive(AlarmState.armed);
+    connection.publishDetection(9000, sensor: Sensor.pirChambre);
+    connection.publishState(AlarmState.triggered);
+
+    expect(controller.intrusionRooms, [Room.chambre]);
+    expect(controller.roomStatus(Room.chambre), SensorStatus.intrusion);
+    expect(controller.roomStatus(Room.salon), SensorStatus.monitoring);
+    expect(controller.roomStatus(Room.entree), SensorStatus.monitoring);
+    expect(controller.sensorStatus(Sensor.pirChambre), SensorStatus.intrusion);
+    expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.monitoring);
+
+    connection.publishState(AlarmState.disarmed);
+    expect(controller.intrusionRooms, isEmpty);
+    expect(controller.roomStatus(Room.chambre), SensorStatus.inactive);
+  });
+
+  test('intrusion qui se déplace : salon puis chambre, les deux en alerte', () {
+    connection.goLive(AlarmState.armed);
+    connection.publishDetection(9000, sensor: Sensor.pirSalon);
+    connection.publishState(AlarmState.triggered);
+    expect(controller.intrusionRooms, [Room.salon]);
+    expect(controller.roomStatus(Room.chambre), SensorStatus.monitoring);
+
+    // Nouvelle détection publiée par l'ESP32 alors que la sirène sonne déjà.
+    connection.publishDetection(16000, sensor: Sensor.pirChambre);
+    expect(controller.intrusionSensor, Sensor.pirSalon, reason: 'déclencheur inchangé');
+    expect(controller.intrusionRooms, [Room.salon, Room.chambre]);
+    expect(controller.roomStatus(Room.salon), SensorStatus.intrusion);
+    expect(controller.roomStatus(Room.chambre), SensorStatus.intrusion);
+    expect(controller.roomStatus(Room.entree), SensorStatus.monitoring);
+
+    connection.publishState(AlarmState.disarmed);
+    expect(controller.intrusionRooms, isEmpty);
+  });
+
+  test('mode nuit : les PIR du salon et de la chambre sont ignorés', () {
+    connection.goLive(AlarmState.armedNight);
+    expect(controller.sensorStatus(Sensor.pirSalon), SensorStatus.ignoredAtNight);
+    expect(controller.sensorStatus(Sensor.pirChambre), SensorStatus.ignoredAtNight);
+    expect(controller.roomStatus(Room.salon), SensorStatus.ignoredAtNight);
+    expect(controller.roomStatus(Room.chambre), SensorStatus.monitoring, reason: 'fenêtre');
+  });
+
   test('intrusion : sirène active, mouvement historisé, DISARM proposé', () {
     connection.goLive(AlarmState.armed);
     connection.publishDetection(125000);

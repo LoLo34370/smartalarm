@@ -49,6 +49,13 @@
       "attrs": {}
     },
     {
+      "type": "wokwi-pir-motion-sensor",
+      "id": "pir_chambre",
+      "top": -112,
+      "left": -400,
+      "attrs": {}
+    },
+    {
       "type": "wokwi-slide-switch",
       "id": "sw_door",
       "top": 170,
@@ -75,6 +82,7 @@
     [ "esp:D13", "pir:OUT", "blue", [ "h-250" ] ],
     [ "esp:D14", "sw_door:2", "violet", [ "h-245" ] ],
     [ "esp:D32", "sw_window:2", "purple", [ "h-145" ] ],
+    [ "esp:D33", "pir_chambre:OUT", "cyan", [] ],
 
     [ "bz1:1", "esp:GND.2", "black", [ "v235", "h40" ] ],
     [ "led_green:C", "esp:GND.2", "black", [ "v245", "h110" ] ],
@@ -82,8 +90,10 @@
     [ "pir:GND", "esp:GND.2", "black", [ "v235", "h240.36" ] ],
     [ "sw_door:1", "esp:GND.2", "black", [ "v40" ] ],
     [ "sw_window:1", "esp:GND.2", "black", [ "v40" ] ],
+    [ "pir_chambre:GND", "esp:GND.2", "black", [] ],
 
-    [ "pir:VCC", "esp:3V3", "red", [ "v250", "h375", "v-71.5" ] ]
+    [ "pir:VCC", "esp:3V3", "red", [ "v250", "h375", "v-71.5" ] ],
+    [ "pir_chambre:VCC", "esp:3V3", "red", [] ]
   ],
   "dependencies": {}
 }

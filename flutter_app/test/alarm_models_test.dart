@@ -52,6 +52,11 @@ void main() {
         '{"event":"OPENING_DETECTED","sensor":"door","uptimeMs":7000}',
       );
       expect(event?.sensor, Sensor.door);
+      final chambre = Detection.tryParse(
+        '{"event":"MOTION_DETECTED","sensor":"pir_chambre","room":"chambre","uptimeMs":9000}',
+      );
+      expect(chambre?.sensor, Sensor.pirChambre);
+      expect(chambre?.sensor.room, Room.chambre);
       expect(
         Detection.tryParse('{"event":"OPENING_DETECTED","sensor":"garage","uptimeMs":1}'),
         isNull,
@@ -68,8 +73,9 @@ void main() {
 
   test('tryParseSensorStates', () {
     expect(
-      tryParseSensorStates('{"pir_salon":"ACTIVE","door":"CLOSED","window":"OPEN","x":"OPEN"}'),
-      {Sensor.pirSalon: true, Sensor.door: false, Sensor.window: true},
+      tryParseSensorStates('{"pir_salon":"ACTIVE","pir_chambre":"IDLE","door":"CLOSED",'
+          '"window":"OPEN","x":"OPEN"}'),
+      {Sensor.pirSalon: true, Sensor.pirChambre: false, Sensor.door: false, Sensor.window: true},
     );
     expect(tryParseSensorStates('{"door":"?"}'), isEmpty);
     expect(tryParseSensorStates(''), isNull);
@@ -79,6 +85,7 @@ void main() {
     expect(Sensor.door.isMonitoredIn(AlarmState.armedNight), isTrue);
     expect(Sensor.pirSalon.isMonitoredIn(AlarmState.armedNight), isFalse);
     expect(Sensor.pirSalon.isMonitoredIn(AlarmState.armed), isTrue);
+    expect(Sensor.pirChambre.isMonitoredIn(AlarmState.armedNight), isFalse);
     expect(Sensor.window.isMonitoredIn(AlarmState.disarmed), isFalse);
   });
 

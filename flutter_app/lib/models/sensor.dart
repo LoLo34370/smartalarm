@@ -5,17 +5,37 @@ import 'alarm_models.dart';
 /// Zone d'un capteur : le mode nuit ne surveille que le périmètre.
 enum SensorZone { perimeter, interior }
 
+/// Pièces de la maison, dans l'ordre d'affichage.
+enum Room {
+  salon('Salon', 'dans le salon'),
+  chambre('Chambre', 'dans la chambre'),
+  entree('Entrée', 'dans l\'entrée');
+
+  const Room(this.label, this.inLabel);
+
+  final String label;
+
+  /// Complément de lieu, ex. « Intrusion dans la chambre ».
+  final String inLabel;
+
+  /// Capteurs installés dans cette pièce.
+  List<Sensor> get sensors => [for (final s in Sensor.values) if (s.room == this) s];
+}
+
 /// Capteurs câblés sur l'ESP32 (voir docs/architecture.md).
 enum Sensor {
-  pirSalon('pir_salon', 'Mouvement salon', SensorZone.interior, isContact: false),
-  door('door', 'Porte d\'entrée', SensorZone.perimeter, isContact: true),
-  window('window', 'Fenêtre', SensorZone.perimeter, isContact: true);
+  pirSalon('pir_salon', 'Mouvement salon', Room.salon, SensorZone.interior, isContact: false),
+  pirChambre('pir_chambre', 'Mouvement chambre', Room.chambre, SensorZone.interior,
+      isContact: false),
+  door('door', 'Porte d\'entrée', Room.entree, SensorZone.perimeter, isContact: true),
+  window('window', 'Fenêtre', Room.chambre, SensorZone.perimeter, isContact: true);
 
-  const Sensor(this.wireId, this.label, this.zone, {required this.isContact});
+  const Sensor(this.wireId, this.label, this.room, this.zone, {required this.isContact});
 
   /// Identifiant dans les messages MQTT.
   final String wireId;
   final String label;
+  final Room room;
   final SensorZone zone;
 
   /// Contact d'ouverture (porte, fenêtre), sinon détecteur de mouvement.
@@ -32,7 +52,7 @@ enum Sensor {
       };
 }
 
-/// Analyse `{"pir_salon":"IDLE","door":"OPEN","window":"CLOSED"}` publié
+/// Analyse `{"pir_salon":"IDLE","pir_chambre":"IDLE","door":"OPEN",…}` publié
 /// en retained sur `<base>/sensors`. Valeur `true` = capteur actif (mouvement
 /// en cours, porte ou fenêtre ouverte). Les clés inconnues sont ignorées.
 Map<Sensor, bool>? tryParseSensorStates(String payload) {

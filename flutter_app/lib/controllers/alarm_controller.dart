@@ -10,6 +10,7 @@ import '../services/device_authenticator.dart';
 import '../services/journal_store.dart';
 
 /// Ce qu'un capteur signifie pour l'utilisateur, déduit de l'état publié.
+/// Rangé du moins au plus important (utilisé par [AlarmController.roomStatus]).
 enum SensorStatus {
   /// Alarme désactivée : le capteur ne déclenche rien.
   inactive,
@@ -72,7 +73,11 @@ class AlarmController extends ChangeNotifier {
   AlarmState? _alarmState;
   DeviceAvailability _availability = DeviceAvailability.unknown;
   final Map<Sensor, bool> _sensorStates = {};
-  Sensor? _intrusionSensor;
+
+  /// Capteurs ayant détecté quelqu'un pendant l'intrusion en cours, dans
+  /// l'ordre : le premier a déclenché l'alarme, les suivants sont les
+  /// détections reçues ensuite (ex. l'intrus passe du salon à la chambre).
+  final List<Sensor> _intrusionSensors = [];
   AlarmCommand? _pendingCommand;
   String? _commandWarning;
 
@@ -108,11 +113,25 @@ class AlarmController extends ChangeNotifier {
       [for (final s in Sensor.values) if (s.isContact && _sensorStates[s] == true) s];
 
   /// Capteur à l'origine de l'intrusion en cours, s'il est connu.
-  Sensor? get intrusionSensor => isTriggered ? _intrusionSensor : null;
+  Sensor? get intrusionSensor => intrusionSensors.firstOrNull;
+
+  /// Tous les capteurs ayant détecté quelqu'un depuis le déclenchement.
+  List<Sensor> get intrusionSensors =>
+      isTriggered ? List.unmodifiable(_intrusionSensors) : const [];
+
+  /// Pièces où quelqu'un a été détecté pendant l'intrusion en cours, sans doublon.
+  List<Room> get intrusionRooms => intrusionSensors.map((s) => s.room).toSet().toList();
+
+  /// Statut le plus important parmi les capteurs de la pièce : seules les
+  /// pièces où quelqu'un a été détecté passent en intrusion.
+  SensorStatus roomStatus(Room room) =>
+      room.sensors.map(sensorStatus).reduce((a, b) => a.index >= b.index ? a : b);
 
   SensorStatus sensorStatus(Sensor sensor) {
     if (isTriggered) {
-      return sensor == _intrusionSensor ? SensorStatus.intrusion : SensorStatus.monitoring;
+      return _intrusionSensors.contains(sensor)
+          ? SensorStatus.intrusion
+          : SensorStatus.monitoring;
     }
     if (sensor.isMonitoredIn(_alarmState)) return SensorStatus.monitoring;
     return _alarmState == AlarmState.armedNight
@@ -249,7 +268,7 @@ class AlarmController extends ChangeNotifier {
     if (state == AlarmState.triggered && previous != AlarmState.triggered) {
       onIntrusion?.call();
     }
-    if (state != AlarmState.triggered) _intrusionSensor = null;
+    if (state != AlarmState.triggered) _intrusionSensors.clear();
     _notify();
   }
 
@@ -262,8 +281,15 @@ class AlarmController extends ChangeNotifier {
   }
 
   void _onDetection(Detection event) {
-    // L'ESP32 publie la détection juste avant de passer en TRIGGERED.
-    if (_alarmState?.isArmed ?? false) _intrusionSensor = event.sensor;
+    // L'ESP32 publie la détection juste avant de passer en TRIGGERED, puis
+    // continue de publier les nouvelles détections tant que l'alarme sonne.
+    if (_alarmState?.isArmed ?? false) {
+      _intrusionSensors
+        ..clear()
+        ..add(event.sensor);
+    } else if (isTriggered && !_intrusionSensors.contains(event.sensor)) {
+      _intrusionSensors.add(event.sensor);
+    }
     _record(AlarmEvent.fromDetection(event));
     _notify();
   }

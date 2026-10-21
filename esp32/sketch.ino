@@ -8,9 +8,10 @@
 //   - il publie l'état des capteurs (retained)           sur  <base>/sensors
 //   - il publie online / offline (retained)              sur  <base>/availability (+ Last Will)
 //
-// Capteurs : PIR du salon (intérieur), contacts de la porte d'entrée et de la
-// fenêtre (périmètre). ARMED surveille tout ; ARMED_NIGHT seulement le
-// périmètre, pour pouvoir circuler dans la maison la nuit.
+// Capteurs, rangés par pièce : PIR du salon et PIR de la chambre (intérieur),
+// contacts de la porte d'entrée et de la fenêtre de la chambre (périmètre).
+// Chaque détection indique sa pièce. ARMED surveille tout ; ARMED_NIGHT
+// seulement le périmètre, pour pouvoir circuler dans la maison la nuit.
 //
 // Les commandes restent aussi utilisables depuis le moniteur série
 // (débogage). Elles passent par la même fonction handleCommand().
@@ -23,9 +24,10 @@
 #include "config.h"  // identifiants (non versionné) — voir config.example.h
 
 // ── Brochage (voir docs/architecture.md) ────────────────────────────────────
-constexpr uint8_t PIN_PIR       = 13;  // entrée : sortie OUT du capteur PIR
-constexpr uint8_t PIN_DOOR      = 14;  // entrée (pull-up) : contact porte d'entrée
-constexpr uint8_t PIN_WINDOW    = 32;  // entrée (pull-up) : contact fenêtre
+constexpr uint8_t PIN_PIR         = 13;  // entrée : sortie OUT du PIR du salon
+constexpr uint8_t PIN_PIR_CHAMBRE = 33;  // entrée : sortie OUT du PIR de la chambre
+constexpr uint8_t PIN_DOOR        = 14;  // entrée (pull-up) : contact porte d'entrée
+constexpr uint8_t PIN_WINDOW      = 32;  // entrée (pull-up) : contact fenêtre de la chambre
 constexpr uint8_t PIN_BUZZER    = 25;  // sortie : sirène
 constexpr uint8_t PIN_LED_GREEN = 26;  // sortie : alarme activée
 constexpr uint8_t PIN_LED_RED   = 27;  // sortie : intrusion
@@ -70,6 +72,7 @@ enum class SensorZone { PERIMETER, INTERIOR };
 
 struct Sensor {
   const char *id;           // identifiant dans les messages MQTT
+  const char *room;         // pièce surveillée : salon, chambre ou entree
   uint8_t     pin;
   SensorZone  zone;
   bool        isContact;    // contact d'ouverture (sinon : détecteur de mouvement)
@@ -77,9 +80,10 @@ struct Sensor {
 };
 
 Sensor sensors[] = {
-  {"pir_salon", PIN_PIR,    SensorZone::INTERIOR,  false, LOW},
-  {"door",      PIN_DOOR,   SensorZone::PERIMETER, true,  LOW},
-  {"window",    PIN_WINDOW, SensorZone::PERIMETER, true,  LOW},
+  {"pir_salon",   "salon",   PIN_PIR,         SensorZone::INTERIOR,  false, LOW},
+  {"pir_chambre", "chambre", PIN_PIR_CHAMBRE, SensorZone::INTERIOR,  false, LOW},
+  {"door",        "entree",  PIN_DOOR,        SensorZone::PERIMETER, true,  LOW},
+  {"window",      "chambre", PIN_WINDOW,      SensorZone::PERIMETER, true,  LOW},
 };
 
 bool     redLedOn         = false;
@@ -133,11 +137,11 @@ void publishState() {
 }
 
 void publishDetection(const Sensor &sensor, uint32_t uptimeMs) {
-  char payload[112];
+  char payload[144];
   snprintf(payload, sizeof(payload),
-           "{\"event\":\"%s\",\"sensor\":\"%s\",\"uptimeMs\":%lu}",
+           "{\"event\":\"%s\",\"sensor\":\"%s\",\"room\":\"%s\",\"uptimeMs\":%lu}",
            sensor.isContact ? "OPENING_DETECTED" : "MOTION_DETECTED", sensor.id,
-           (unsigned long)uptimeMs);
+           sensor.room, (unsigned long)uptimeMs);
 
   if (mqtt.connected()) {
     const bool ok = mqtt.publish(TOPIC_MOTION.c_str(), payload, false);  // jamais retained
@@ -333,6 +337,7 @@ void handleSensor(Sensor &sensor) {
   if (alarmState == AlarmState::TRIGGERED) {
     publishDetection(sensor, millis());  // nouvelle détection pendant l'alarme : historisée
   } else if (isMonitored(sensor)) {
+    Serial.printf("[ALARM ] intrusion dans : %s (%s)\r\n", sensor.room, sensor.id);
     publishDetection(sensor, millis());
     setState(AlarmState::TRIGGERED);
   } else {
@@ -477,6 +482,7 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(PIN_PIR, INPUT);
+  pinMode(PIN_PIR_CHAMBRE, INPUT);
   pinMode(PIN_DOOR, INPUT_PULLUP);
   pinMode(PIN_WINDOW, INPUT_PULLUP);
   pinMode(PIN_BUZZER, OUTPUT);

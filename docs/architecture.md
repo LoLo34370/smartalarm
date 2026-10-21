@@ -6,7 +6,8 @@
 ┌──────────────────────────┐          ┌──────────────────────┐          ┌────────────────────────────┐
 │  ESP32 (simulé Wokwi)    │  MQTTS   │    HiveMQ Cloud      │   WSS    │   Application Flutter      │
 │                          │  :8883   │    (Serverless)      │  :8884   │   (Web, iOS, Android)      │
-│  PIR  → GPIO 13 (in)     │◀────────▶│                      │◀────────▶│  MqttService (WSS / TLS)   │
+│  PIR salon → GPIO 13     │◀────────▶│                      │◀────────▶│  MqttService (WSS / TLS)   │
+│  PIR chambre → GPIO 33   │          │                      │          │                            │
 │  Porte → GPIO 14 (in)    │          │                      │          │                            │
 │  Fenêtre → GPIO 32 (in)  │          │                      │          │                            │
 │  LED verte → GPIO 26     │   TLS    │  broker MQTT 3.1.1   │   TLS    │                            │
@@ -27,17 +28,24 @@ jamais en direct.
 
 | Composant | Responsabilités |
 |-----------|-----------------|
-| **ESP32** | Lit les capteurs (PIR, contacts de porte et de fenêtre), pilote les LEDs et le buzzer, tient la machine à états, exécute les commandes `ARM`, `ARM_NIGHT` et `DISARM`, publie `state`, `motion`, `sensors` et `availability`. |
+| **ESP32** | Lit les capteurs (PIR du salon et de la chambre, contacts de porte et de fenêtre), pilote les LEDs et le buzzer, tient la machine à états, exécute les commandes `ARM`, `ARM_NIGHT` et `DISARM`, publie `state`, `motion`, `sensors` et `availability`. |
 | **HiveMQ Cloud** | Relaie les messages, conserve les messages *retained* (dernier état, disponibilité) et publie le *Last Will* si l'ESP32 disparaît. |
 | **Flutter** | Affiche l'état reçu et envoie des commandes. **Ne modifie jamais lui-même l'état métier.** |
 
 ## Capteurs
 
-| Capteur | Identifiant MQTT | Zone | Simulation Wokwi | Actif quand |
-|---------|------------------|------|------------------|-------------|
-| PIR du salon | `pir_salon` | intérieur | capteur PIR | mouvement détecté |
-| Porte d'entrée | `door` | périmètre | interrupteur à glissière de gauche | contact ouvert |
-| Fenêtre | `window` | périmètre | interrupteur à glissière de droite | contact ouvert |
+| Capteur | Identifiant MQTT | Pièce | Zone | Simulation Wokwi | Actif quand |
+|---------|------------------|-------|------|------------------|-------------|
+| PIR du salon | `pir_salon` | salon | intérieur | capteur PIR de droite | mouvement détecté |
+| PIR de la chambre | `pir_chambre` | chambre | intérieur | capteur PIR de gauche | mouvement détecté |
+| Porte d'entrée | `door` | entrée | périmètre | interrupteur à glissière de gauche | contact ouvert |
+| Fenêtre | `window` | chambre | périmètre | interrupteur à glissière de droite | contact ouvert |
+
+**Détection par pièce** : chaque capteur appartient à une pièce. L'ESP32
+l'indique dans chaque détection (`"room"` dans `motion`). L'application
+affiche « Intrusion dans la chambre » et ne passe en rouge **que** la pièce
+du capteur déclencheur : un mouvement dans la chambre laisse le salon
+« Surveillé ». En mode nuit, les deux PIR (intérieur) sont ignorés.
 
 Les contacts sont câblés entre la broche et GND, avec la résistance de
 *pull-up* interne de l'ESP32 : contact fermé = LOW, contact ouvert = HIGH.
@@ -64,12 +72,12 @@ externe.
 |------|-----------|-----------|--------|---------------------|
 | `DISARMED` | éteinte | éteinte | off | aucun |
 | `ARMED` | allumée | éteinte | off | **tous** |
-| `ARMED_NIGHT` | **clignote lentement** | éteinte | off | **porte et fenêtre** (PIR ignoré) |
+| `ARMED_NIGHT` | **clignote lentement** | éteinte | off | **porte et fenêtre** (PIR ignorés) |
 | `TRIGGERED` | allumée | **clignote** | **on** | (déjà déclenché) |
 
 Règles :
 - **Démarrage** : l'ESP32 démarre toujours en `DISARMED`, pour que la démo commence dans un état sûr, puis publie cet état.
-- **Mode nuit** : on reste chez soi, alarme armée. Les ouvertures de porte et de fenêtre déclenchent l'alarme, mais pas les mouvements dans le salon.
+- **Mode nuit** : on reste chez soi, alarme armée. Les ouvertures de porte et de fenêtre déclenchent l'alarme, mais pas les mouvements dans le salon ni dans la chambre.
 - On peut passer directement de `ARMED` à `ARMED_NIGHT` et inversement. Dans l'application, seule la désactivation est proposée une fois armé, pour garder un bouton simple.
 - `TRIGGERED` **reste actif** même si le capteur revient au repos. Seul un `DISARM` en sort.
 - `ARM` ou `ARM_NIGHT` reçu en `TRIGGERED` ne coupe pas la sirène. Une commande qui ne change rien republie l'état courant.
@@ -127,7 +135,8 @@ d'avertissement et ne simule jamais l'état.
 
 | Fonction | GPIO | Sens | Compatibilité |
 |----------|------|------|---------------|
-| PIR OUT | 13 | entrée | ✅ GPIO standard. Ce n'est pas une broche de *strapping*. L'usage ADC2 n'est pas concerné, car on fait une lecture numérique. |
+| PIR salon OUT | 13 | entrée | ✅ GPIO standard. Ce n'est pas une broche de *strapping*. L'usage ADC2 n'est pas concerné, car on fait une lecture numérique. |
+| PIR chambre OUT | 33 | entrée | ✅ GPIO standard (ADC1), entrée et sortie, pas une broche de *strapping*. |
 | Contact porte | 14 | entrée, *pull-up* interne | ✅ Pas une broche de *strapping*. Le signal PWM émis au démarrage n'a pas d'effet sur une entrée. |
 | Contact fenêtre | 32 | entrée, *pull-up* interne | ✅ GPIO standard (ADC1), *pull-up* interne disponible, contrairement à 34 à 39. |
 | Buzzer | 25 | sortie | ✅ Sortie numérique et PWM (LEDC) sans restriction. |

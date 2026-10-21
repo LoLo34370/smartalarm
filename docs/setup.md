@@ -124,7 +124,8 @@ Résultat constaté le 19/10/2026 sur le cluster du projet (ports 8883 et 8884) 
 
 | Composant | Broche composant | ESP32 DevKit V1 |
 |-----------|------------------|-----------------|
-| PIR | VCC / OUT / GND | 3V3 / **D13** / GND |
+| PIR salon (de droite) | VCC / OUT / GND | 3V3 / **D13** / GND |
+| PIR chambre (de gauche) | VCC / OUT / GND | 3V3 / **D33** / GND |
 | Buzzer | 2 (+) / 1 (−) | **D25** / GND |
 | LED verte (« ARMED ») | A → résistance 220 Ω | **D26** ; C → GND |
 | LED rouge (« ALERT ») | A → résistance 220 Ω | **D27** ; C → GND |
@@ -135,7 +136,7 @@ Résultat constaté le 19/10/2026 sur le cluster du projet (ports 8883 et 8884) 
 
 1. Cliquer sur ▶ (**Start the simulation**). Le moniteur série s'ouvre en bas.
 2. Au démarrage, attendu : `[STATE ] DISARMED`. Toutes les LEDs sont éteintes et le buzzer est muet.
-3. Cliquer sur le **PIR**, puis sur **Simulate Motion** : `pir_salon ignoré (alarme désactivée)`.
+3. Cliquer sur le **PIR du salon** (celui de droite), puis sur **Simulate Motion** : `pir_salon ignoré (alarme désactivée)`.
 4. Cliquer dans la zone de saisie du moniteur série, taper `ARM`, puis Entrée : `DISARMED -> ARMED`, LED verte allumée.
 5. **Simulate Motion** : `[MOTION] …`, puis `ARMED -> TRIGGERED`. La LED rouge clignote et la sirène sonne (activer le son du navigateur).
 6. Attendre environ 5 s : le PIR repasse au repos (`[SENSOR] pir_salon IDLE`), mais l'alarme **reste** TRIGGERED.
@@ -149,10 +150,22 @@ Les deux interrupteurs à glissière simulent les contacts : position reliée
 fermée avant de commencer.
 
 1. Taper `ARM_NIGHT` : `DISARMED -> ARMED_NIGHT`, la LED verte clignote lentement.
-2. **Simulate Motion** sur le PIR : `pir_salon ignoré (mode nuit)`. Rien ne se déclenche.
+2. **Simulate Motion** sur chaque PIR : `pir_salon ignoré (mode nuit)`, puis `pir_chambre ignoré (mode nuit)`. Rien ne se déclenche.
 3. Basculer l'interrupteur de la **porte** : `[MOTION] {"event":"OPENING_DETECTED","sensor":"door",…}`,
    puis `ARMED_NIGHT -> TRIGGERED`.
 4. Taper `DISARM`. Refermer la porte.
+
+### Tester la détection par pièce
+
+1. Taper `ARM`.
+2. **Simulate Motion** sur le **PIR de la chambre** (celui de gauche) :
+   `[ALARM ] intrusion dans : chambre (pir_chambre)`, puis
+   `[MOTION] {"event":"MOTION_DETECTED","sensor":"pir_chambre","room":"chambre",…}`
+   et `ARMED -> TRIGGERED`.
+3. Dans l'application : bandeau « Intrusion dans la chambre ! ». La pièce
+   Chambre passe en rouge, le Salon et l'Entrée restent « Surveillé ».
+4. Taper `DISARM`, puis recommencer avec le PIR du salon : c'est cette fois
+   le Salon qui passe en rouge.
 
 > Le PIR de Wokwi reste à HIGH pendant `delayTime` = 5 s, puis ignore les
 > mouvements pendant `inhibitTime` = 1,2 s. Il faut donc attendre environ 6 s
@@ -201,7 +214,7 @@ Prérequis : extensions VS Code **PlatformIO IDE** et **Wokwi Simulator**.
    [MQTT  ] smartalarm/demo01/availability -> online
    [MQTT  ] abonnement smartalarm/demo01/command (QoS 1) OK
    [STATE ] DISARMED -> smartalarm/demo01/state (publié)
-   [SENSOR] {"pir_salon":"IDLE","door":"CLOSED","window":"CLOSED"} (publié)
+   [SENSOR] {"pir_salon":"IDLE","pir_chambre":"IDLE","door":"CLOSED","window":"CLOSED"} (publié)
    ```
 
 > ⚠️ **Visibilité Wokwi** : avec un compte gratuit, un projet Wokwi
@@ -227,10 +240,10 @@ Abonné à `smartalarm/demo01/#` :
 
 | Action | Attendu dans le Web Client |
 |--------|----------------------------|
-| Démarrer la simulation | `availability` = `online`, `state` = `{"state":"DISARMED"}`, `sensors` = état des trois capteurs |
+| Démarrer la simulation | `availability` = `online`, `state` = `{"state":"DISARMED"}`, `sensors` = état des quatre capteurs |
 | Publier `{"command":"ARM"}` sur `…/command` (retain décoché) | `state` = `{"state":"ARMED"}`, LED verte allumée |
-| PIR → **Simulate Motion** | `motion` = `{"event":"MOTION_DETECTED","sensor":"pir_salon","uptimeMs":…}`, puis `state` = `TRIGGERED` |
-| Publier `{"command":"ARM_NIGHT"}`, puis basculer la porte | `state` = `ARMED_NIGHT`, puis `motion` = `{"event":"OPENING_DETECTED","sensor":"door",…}` et `state` = `TRIGGERED` |
+| PIR salon → **Simulate Motion** | `motion` = `{"event":"MOTION_DETECTED","sensor":"pir_salon","room":"salon","uptimeMs":…}`, puis `state` = `TRIGGERED` |
+| Publier `{"command":"ARM_NIGHT"}`, puis basculer la porte | `state` = `ARMED_NIGHT`, puis `motion` = `{"event":"OPENING_DETECTED","sensor":"door","room":"entree",…}` et `state` = `TRIGGERED` |
 | Publier `{"command":"DISARM"}` | `state` = `{"state":"DISARMED"}`, sirène coupée |
 | Publier `hello` sur `…/command` | Rien ne change. L'ESP32 affiche `payload invalide ignoré` |
 | **Arrêter** la simulation (■) | Après environ 90 s (keep-alive de 60 s × 1,5), `availability` = `offline` (Last Will) |

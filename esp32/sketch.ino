@@ -319,6 +319,13 @@ void readSerialCommand() {
   }
 }
 
+// Intrusion détectée par un capteur surveillé : on la publie, puis on déclenche.
+void trigger(const Sensor &sensor) {
+  Serial.printf("[ALARM ] intrusion dans : %s (%s)\r\n", sensor.room, sensor.id);
+  publishDetection(sensor, millis());
+  setState(AlarmState::TRIGGERED);
+}
+
 // Détecte une NOUVELLE détection : uniquement sur le front montant
 // (mouvement qui commence, porte ou fenêtre qui s'ouvre).
 void handleSensor(Sensor &sensor) {
@@ -337,12 +344,23 @@ void handleSensor(Sensor &sensor) {
   if (alarmState == AlarmState::TRIGGERED) {
     publishDetection(sensor, millis());  // nouvelle détection pendant l'alarme : historisée
   } else if (isMonitored(sensor)) {
-    Serial.printf("[ALARM ] intrusion dans : %s (%s)\r\n", sensor.room, sensor.id);
-    publishDetection(sensor, millis());
-    setState(AlarmState::TRIGGERED);
+    trigger(sensor);
   } else {
     Serial.printf("[SENSOR] %s ignoré (%s)\r\n", sensor.id,
                   alarmState == AlarmState::ARMED_NIGHT ? "mode nuit" : "alarme désactivée");
+  }
+}
+
+// Un PIR qui voit ENCORE quelqu'un alors que l'alarme est armée (ex. on
+// désactive puis réactive pendant que le mouvement dure) déclenche aussitôt :
+// la personne est toujours dans la pièce. Les contacts gardent la règle du
+// front montant (porte laissée ouverte : voir arm()).
+void checkActiveMotion() {
+  for (const Sensor &sensor : sensors) {
+    if (!sensor.isContact && sensor.lastLevel == HIGH && isMonitored(sensor)) {
+      trigger(sensor);
+      return;  // TRIGGERED : plus aucun capteur n'est « surveillé »
+    }
   }
 }
 
@@ -350,6 +368,7 @@ void handleSensors() {
   for (Sensor &sensor : sensors) {
     handleSensor(sensor);
   }
+  checkActiveMotion();
 }
 
 // Animation non bloquante : LED verte lente en mode nuit ;

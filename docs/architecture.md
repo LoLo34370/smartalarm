@@ -83,6 +83,7 @@ Règles :
 - `ARM` ou `ARM_NIGHT` reçu en `TRIGGERED` ne coupe pas la sirène. Une commande qui ne change rien republie l'état courant.
 - `DISARM` reçu en `DISARMED` ne change rien non plus. L'état courant est republié.
 - Une détection n'est retenue que sur un **front montant** (LOW → HIGH) : un mouvement qui commence, une porte qui s'ouvre. Un capteur qui reste actif ne génère donc pas un flux continu d'événements.
+- **PIR encore actif à l'armement** : si un PIR voit toujours quelqu'un au moment où l'alarme est armée (par exemple on désactive puis réactive pendant que le mouvement dure), l'alarme se déclenche aussitôt, car la personne est toujours dans la pièce. Cette règle ne vaut que pour les PIR, pas pour les contacts.
 - **Contact déjà ouvert à l'armement** : l'alarme s'arme quand même, mais ce contact ne déclenchera qu'à sa prochaine ouverture. L'ESP32 le signale dans ses logs et l'application prévient avant d'armer (« Fenêtre ouverte : pensez à la fermer… »).
 
 ## Flux « commande → confirmation »

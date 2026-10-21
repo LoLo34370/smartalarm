@@ -144,13 +144,20 @@ class DashboardScreen extends StatelessWidget {
   Widget _deviceCards() => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SensorsCard(entries: [
-            for (final sensor in Sensor.values)
+          SensorsCard(rooms: [
+            for (final room in Room.values)
               (
-                sensor: sensor,
-                status: controller.sensorStatus(sensor),
-                isActive: controller.isSensorActive(sensor),
-                lastDetectionAt: controller.lastDetection(sensor)?.at,
+                room: room,
+                status: controller.roomStatus(room),
+                sensors: [
+                  for (final sensor in room.sensors)
+                    (
+                      sensor: sensor,
+                      status: controller.sensorStatus(sensor),
+                      isActive: controller.isSensorActive(sensor),
+                      lastDetectionAt: controller.lastDetection(sensor)?.at,
+                    ),
+                ],
               ),
           ]),
           const SizedBox(height: 16),
@@ -176,10 +183,12 @@ class _Banners extends StatelessWidget {
   Widget build(BuildContext context) {
     final banners = <Widget>[
       if (controller.isTriggered)
-        switch (controller.intrusionSensor) {
-          final sensor? => IntrusionBanner(
-              cause: '${sensor.isContact ? 'Ouverture' : 'Mouvement'} : ${sensor.label}.'),
-          null => const IntrusionBanner(),
+        switch (controller.intrusionSensors) {
+          [] => const IntrusionBanner(),
+          final sensors => IntrusionBanner(
+              title: 'Intrusion ${controller.intrusionRooms.map((r) => r.inLabel).join(' et ')} !',
+              cause: '${sensors.map((s) => '${s.isContact ? 'Ouverture' : 'Mouvement'} : '
+                  '${s.label}').join(', puis ')}.'),
         },
       if (controller.connectionError case final error?)
         NoticeBanner(icon: Icons.cloud_off_rounded, message: error)

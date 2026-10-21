@@ -70,11 +70,27 @@ typedef SensorEntry = ({
   DateTime? lastDetectionAt,
 });
 
-/// Capteurs de la maison : état en direct et rôle dans le mode courant.
-class SensorsCard extends StatelessWidget {
-  const SensorsCard({super.key, required this.entries});
+/// Section de [SensorsCard] : une pièce et ses capteurs.
+typedef RoomEntry = ({
+  Room room,
+  SensorStatus status,
+  List<SensorEntry> sensors,
+});
 
-  final List<SensorEntry> entries;
+/// Libellé et couleurs d'un statut de capteur ou de pièce.
+(String, Color, Color) _statusStyle(SensorStatus status) => switch (status) {
+      SensorStatus.inactive => ('Inactif', AppColors.inactive, AppColors.inactiveSoft),
+      SensorStatus.ignoredAtNight => ('Ignoré la nuit', AppColors.night, AppColors.nightSoft),
+      SensorStatus.monitoring => ('Surveillé', AppColors.protected, AppColors.protectedSoft),
+      SensorStatus.intrusion => ('Intrusion !', AppColors.alert, AppColors.alertSoft),
+    };
+
+/// Capteurs de la maison, regroupés par pièce : état en direct et rôle dans
+/// le mode courant. Seule la pièce de l'intrusion passe en rouge.
+class SensorsCard extends StatelessWidget {
+  const SensorsCard({super.key, required this.rooms});
+
+  final List<RoomEntry> rooms;
 
   @override
   Widget build(BuildContext context) {
@@ -85,12 +101,58 @@ class SensorsCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Capteurs',
+            Text('Pièces',
                 style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 4),
-            for (final entry in entries) _SensorRow(entry: entry),
+            for (final room in rooms) _RoomSection(entry: room),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _RoomSection extends StatelessWidget {
+  const _RoomSection({required this.entry});
+
+  final RoomEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final intrusion = entry.status == SensorStatus.intrusion;
+    final (_, color, background) = _statusStyle(entry.status);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      margin: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 4),
+      decoration: BoxDecoration(
+        color: intrusion ? background : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: intrusion ? color : AppColors.inactiveSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(entry.room.label,
+                    style: textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: intrusion ? color : null,
+                    )),
+              ),
+              if (intrusion)
+                Flexible(
+                  child: Text('Intrusion ${entry.room.inLabel}',
+                      textAlign: TextAlign.end,
+                      style: textTheme.labelMedium
+                          ?.copyWith(color: color, fontWeight: FontWeight.w700)),
+                ),
+            ],
+          ),
+          for (final sensor in entry.sensors) _SensorRow(entry: sensor),
+        ],
       ),
     );
   }
@@ -104,15 +166,11 @@ class _SensorRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    final (statusLabel, color, background) = switch (entry.status) {
-      SensorStatus.inactive => ('Inactif', AppColors.inactive, AppColors.inactiveSoft),
-      SensorStatus.ignoredAtNight => ('Ignoré la nuit', AppColors.night, AppColors.nightSoft),
-      SensorStatus.monitoring => ('Surveillé', AppColors.protected, AppColors.protectedSoft),
-      SensorStatus.intrusion => ('Intrusion !', AppColors.alert, AppColors.alertSoft),
-    };
+    final (statusLabel, color, background) = _statusStyle(entry.status);
     final sensor = entry.sensor;
     final icon = switch (sensor) {
       Sensor.pirSalon => Icons.sensors_rounded,
+      Sensor.pirChambre => Icons.bed_outlined,
       Sensor.door => Icons.door_front_door_outlined,
       Sensor.window => Icons.window_outlined,
     };

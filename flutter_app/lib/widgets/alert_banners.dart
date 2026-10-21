@@ -5,7 +5,14 @@ import 'pulse.dart';
 
 /// Bandeau rouge animé affiché pendant une intrusion (état TRIGGERED).
 class IntrusionBanner extends StatelessWidget {
-  const IntrusionBanner({super.key, this.cause = 'Une intrusion a été détectée.'});
+  const IntrusionBanner({
+    super.key,
+    this.title = 'Intrusion détectée !',
+    this.cause = 'Une intrusion a été détectée.',
+  });
+
+  /// Titre, ex. « Intrusion dans la chambre ! » quand la pièce est connue.
+  final String title;
 
   /// Ce qui a déclenché l'alarme, ex. « Ouverture : Porte d'entrée. »
   final String cause;
@@ -35,8 +42,8 @@ class IntrusionBanner extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Intrusion détectée !',
-                      style: TextStyle(
+                  Text(title,
+                      style: const TextStyle(
                           color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
                   Text('$cause La sirène est en marche.',

@@ -233,7 +233,7 @@ Abonné à `smartalarm/demo01/#` :
 | Publier `{"command":"ARM_NIGHT"}`, puis basculer la porte | `state` = `ARMED_NIGHT`, puis `motion` = `{"event":"OPENING_DETECTED","sensor":"door",…}` et `state` = `TRIGGERED` |
 | Publier `{"command":"DISARM"}` | `state` = `{"state":"DISARMED"}`, sirène coupée |
 | Publier `hello` sur `…/command` | Rien ne change. L'ESP32 affiche `payload invalide ignoré` |
-| **Arrêter** la simulation (■) | Après environ 20 s (keep-alive × 1,5), `availability` = `offline` (Last Will) |
+| **Arrêter** la simulation (■) | Après environ 90 s (keep-alive de 60 s × 1,5), `availability` = `offline` (Last Will) |
 | Se réabonner | `state` et `availability` réapparaissent tout seuls (retained) |
 
 ## Application Flutter

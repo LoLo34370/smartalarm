@@ -40,7 +40,7 @@ constexpr uint16_t SIREN_FREQ_HIGH  = 1320;  // Hz
 // ── Réglages réseau ─────────────────────────────────────────────────────────
 constexpr uint32_t WIFI_RETRY_MS     = 10000;  // nouvelle tentative Wi-Fi
 constexpr uint32_t MQTT_RETRY_MS     = 5000;   // nouvelle tentative MQTT
-constexpr uint16_t MQTT_KEEPALIVE_S  = 15;     // détection de coupure par le broker
+constexpr uint16_t MQTT_KEEPALIVE_S  = 60;     // large : le simulateur Wokwi peut tourner plus lentement que le temps réel
 constexpr uint16_t MQTT_BUFFER_SIZE  = 512;
 
 const String TOPIC_COMMAND      = String(TOPIC_BASE) + "/command";
